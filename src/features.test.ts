@@ -764,6 +764,216 @@ describe("distraction log (0081)", () => {
   });
 });
 
+describe("switch task mid-session (0084)", () => {
+  const startFlowtime = async (): Promise<string> => {
+    const { state } = await import("./state");
+    addTask("Write report");
+    const taskId = state.tasks[0].id;
+    document
+      .querySelector<HTMLElement>(".task-start [data-action='start']")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document
+      .querySelector<HTMLElement>('[data-tech="flowtime"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return taskId;
+  };
+
+  it("shows a switch button on the session screen", async () => {
+    await startFlowtime();
+    const btn = document.querySelector<HTMLElement>('[data-action="switch-task"]')!;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toContain("Switch task");
+  });
+
+  it("places the switch button under the phase indicator in the header", async () => {
+    await startFlowtime();
+    const header = document.querySelector<HTMLElement>(".session-header")!;
+    const title = header.querySelector<HTMLElement>(".session-task-title")!;
+    const phase = header.querySelector<HTMLElement>(".session-phase")!;
+    const sw = header.querySelector<HTMLElement>('[data-action="switch-task"]')!;
+    expect(phase).not.toBeNull();
+    expect(sw).not.toBeNull();
+    expect(title.compareDocumentPosition(phase) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(phase.compareDocumentPosition(sw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Not in the corner toggles.
+    expect(
+      document
+        .querySelector<HTMLElement>(".corner-toggles")!
+        .querySelector('[data-action="switch-task"]'),
+    ).toBeNull();
+  });
+
+  it("re-points the session at another task without touching the clock", async () => {
+    const { state } = await import("./state");
+    addTask("Write report");
+    addTask("Buy milk");
+    const taskB = state.tasks[1].id;
+    document
+      .querySelector<HTMLElement>(".task-start [data-action='start']")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document
+      .querySelector<HTMLElement>('[data-tech="flowtime"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const startedAt = state.sessions.find((s) => s.id === state.activeSessionId)!.startedAt;
+    expect(document.querySelector(".clock")).not.toBeNull();
+
+    document
+      .querySelector<HTMLElement>('[data-action="switch-task"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const item = document.querySelector<HTMLElement>(`.switch-item[data-switch="${taskB}"]`)!;
+    expect(item).not.toBeNull();
+    item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const session = state.sessions.find((s) => s.id === state.activeSessionId)!;
+    expect(session.taskId).toBe(taskB);
+    expect(session.status).toBe("running");
+    expect(session.startedAt).toBe(startedAt);
+    // The header now shows the new task and mark-done targets it.
+    expect(document.querySelector(".session-task-title")!.textContent).toBe("Buy milk");
+    expect(document.querySelector<HTMLElement>('[data-action="mark-done"]')!.dataset.id).toBe(
+      taskB,
+    );
+    expect(document.querySelector(".clock")).not.toBeNull();
+    const toasts = Array.from(document.querySelectorAll(".toast-text")).map(
+      (t) => t.textContent ?? "",
+    );
+    expect(toasts.some((t) => t.includes("Now working on"))).toBe(true);
+  });
+
+  it("creates a brand-new task from the picker and attaches it", async () => {
+    const { state } = await import("./state");
+    const taskA = await startFlowtime();
+    expect(state.tasks).toHaveLength(1);
+
+    document
+      .querySelector<HTMLElement>('[data-action="switch-task"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const input = document.querySelector<HTMLInputElement>("#switch-new")!;
+    input.value = "Design mockups #design !1";
+    document
+      .querySelector<HTMLElement>("#switch-new-add")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const created = state.tasks.find((t) => t.title === "Design mockups");
+    expect(created).not.toBeUndefined();
+    expect(state.tasks[0].id).toBe(taskA); // old task left untouched
+    const session = state.sessions.find((s) => s.id === state.activeSessionId)!;
+    expect(session.taskId).toBe(created!.id);
+    expect(document.querySelector(".session-task-title")!.textContent).toBe("Design mockups");
+  });
+
+  it("confirms before switching to a completed task", async () => {
+    const { state } = await import("./state");
+    addTask("Write report");
+    addTask("Ship the docs");
+    const taskA = state.tasks[0].id;
+    const taskC = state.tasks[1].id;
+    document
+      .querySelector<HTMLElement>(".task-start [data-action='start']")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document
+      .querySelector<HTMLElement>('[data-tech="flowtime"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    state.tasks[1].done = true;
+    state.tasks[1].doneAt = Date.now();
+
+    document
+      .querySelector<HTMLElement>('[data-action="switch-task"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const item = document.querySelector<HTMLElement>(`.switch-item.done[data-switch="${taskC}"]`)!;
+    expect(item).not.toBeNull();
+    item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    // Not applied until confirmed.
+    expect(state.sessions.find((s) => s.id === state.activeSessionId)!.taskId).toBe(taskA);
+    expect(document.querySelector("#switch-done-ok")).not.toBeNull();
+    document
+      .querySelector<HTMLElement>("#switch-done-ok")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(state.sessions.find((s) => s.id === state.activeSessionId)!.taskId).toBe(taskC);
+  });
+
+  it("hides the switch button in focus mode", async () => {
+    await startFlowtime();
+    expect(document.querySelector('[data-action="switch-task"]')).not.toBeNull();
+    document
+      .querySelector<HTMLElement>('[data-action="toggle-focus"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(document.querySelector('[data-action="switch-task"]')).toBeNull();
+    expect(document.querySelector(".session-main.focus")).not.toBeNull();
+  });
+
+  it("closes an open dialog with Esc before exiting focus mode", async () => {
+    const { state } = await import("./state");
+    await startFlowtime();
+    document
+      .querySelector<HTMLElement>('[data-action="toggle-focus"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    // Open the shortcuts cheat sheet (reachable in focus mode).
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));
+    expect(document.querySelector(".overlay")).not.toBeNull();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    expect(document.querySelector(".overlay")).toBeNull();
+    expect(document.querySelector(".session-main.focus")).not.toBeNull();
+    expect(state.activeSessionId).not.toBeNull();
+  });
+});
+
+describe("deferred tasks stay out of quick runs", () => {
+  it("keeps a deferred quick task out of the Quick section", async () => {
+    const { state } = await import("./state");
+    const { render } = await import("./views");
+    addTask("Do it soon");
+    addTask("Right now");
+    state.tasks[0].quick = true;
+    state.tasks[0].plannedFor = Date.now() + 86400000; // tomorrow → deferred
+    state.tasks[1].quick = true; // stays in Quick
+    render();
+
+    const quickBody = document.querySelector<HTMLElement>("#section-quick-body")!;
+    const deferredBody = document.querySelector<HTMLElement>("#section-later-body")!;
+    expect(quickBody).not.toBeNull();
+    expect(deferredBody).not.toBeNull();
+    // Only the Later section shows the deferred task, and without a run button.
+    expect(quickBody.textContent).not.toContain("Do it soon");
+    expect(quickBody.textContent).toContain("Right now");
+    expect(deferredBody.textContent).toContain("Do it soon");
+    expect(deferredBody.querySelector('[data-action="quick-run"]')).toBeNull();
+  });
+
+  it("skips deferred tasks when advancing a quick run", async () => {
+    const { state } = await import("./state");
+    const { render } = await import("./views");
+    addTask("Quick A");
+    addTask("Deferred B");
+    state.tasks[0].quick = true;
+    state.tasks[1].quick = true;
+    state.tasks[1].plannedFor = Date.now() + 86400000; // tomorrow
+    render();
+
+    const runButtons = document.querySelectorAll<HTMLElement>(
+      "#section-quick-body [data-action='quick-run']",
+    );
+    expect(runButtons.length).toBe(1);
+    runButtons[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    // The run starts on the only non-deferred quick task.
+    expect(document.querySelector(".session-task-title")!.textContent).toBe("Quick A");
+    expect(document.querySelector('[data-action="quick-next"]')).not.toBeNull();
+
+    document
+      .querySelector<HTMLElement>('[data-action="quick-next"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    // The run ends instead of advancing onto the deferred task.
+    expect(document.querySelector('[data-action="quick-next"]')).toBeNull();
+    expect(state.tasks[0].done).toBe(true);
+    expect(state.tasks[1].done).toBe(false);
+  });
+});
+
 describe("board section consistency", () => {
   it("titles the open tasks section and drops legacy section classes", () => {
     addTask("Alpha");

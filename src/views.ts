@@ -86,6 +86,11 @@ function focusToggleHtml(): string {
   return `<button class="corner-toggle focus-toggle ${focusMode ? "on" : ""}" data-action="toggle-focus" title="${label}" aria-label="${label}" aria-pressed="${focusMode ? "true" : "false"}">${icon("target")}</button>`;
 }
 
+/** 0084: change which task the running session is attached to. */
+function switchTaskButtonHtml(): string {
+  return `<button class="switch-task-btn" data-action="switch-task" title="Switch to another task" aria-label="Switch to another task">${icon("repeat")} Switch task</button>`;
+}
+
 /** Replace the app root, gently animating the view in on first mount (0066). */
 function renderView(key: string, html: string): void {
   const changed = lastViewKey !== key;
@@ -523,7 +528,7 @@ function renderBoard(): void {
     .filter((t) => isFutureOpen(t) && matchesSearch(t))
     .sort((a, b) => (a.plannedFor ?? 0) - (b.plannedFor ?? 0));
   const quickTasks = state.tasks.filter(
-    (t) => t.quick && !t.done && !isTodayOpen(t) && matchesSearch(t),
+    (t) => t.quick && !t.done && !isTodayOpen(t) && !isFutureOpen(t) && matchesSearch(t),
   );
   const mainTasks = sortedTasks(
     state.tasks
@@ -1261,6 +1266,7 @@ function renderSession(session: Session): void {
       <header class="session-header">
         <h2 class="session-task-title">${title}</h2>
         <span class="session-phase">${phaseLabel(snap.phase)} · ${techniqueLabel(session.technique)}</span>
+        ${switchTaskButtonHtml()}
       </header>
 
       ${descBlock}
@@ -1349,7 +1355,7 @@ function renderBreak(): void {
 function renderQuickRun(): void {
   if (!quickRun) return;
   const task = taskById(quickRun.taskId);
-  const left = state.tasks.filter((t) => t.quick && !t.done).length;
+  const left = state.tasks.filter((t) => t.quick && !t.done && !isFutureOpen(t)).length;
   const clockText = formatElapsed(Date.now() - quickRun.startedAt);
   updateDocumentTitle(clockText);
   renderView(

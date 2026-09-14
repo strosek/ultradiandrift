@@ -56,7 +56,7 @@ import {
   saveSettings,
 } from "./storage";
 import { doneSessions, sessionWorkMs, taskTotals } from "./stats";
-import { isTodayOpen } from "./tasks";
+import { isFutureOpen, isTodayOpen } from "./tasks";
 import { MIN, formatDuration, snapshot, techniqueLabel } from "./timer";
 import type { SectionKey } from "./state";
 import type { Quadrant, Recurrence, Session, Settings, Task, Technique } from "./types";
@@ -1552,6 +1552,132 @@ function promptStartSession(taskId: string): void {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Switch the session's task mid-run (0084)                            */
+/* ------------------------------------------------------------------ */
+
+/** 0084: pick a different task for the running session without breaking it. */
+function openSwitchTaskPicker(session: Session): void {
+  const overlay = openDialog(`
+    <h3>Switch task</h3>
+    <p class="dialog-text">Keep the clock running — pick what you're working on now.</p>
+    <input id="switch-search" type="text" placeholder="Search tasks…" autocomplete="off" aria-label="Search tasks" />
+    <div id="switch-list" class="switch-list">
+      <p class="switch-empty">No matching open tasks — create one below.</p>
+    </div>
+    <div class="switch-create">
+      <input id="switch-new" type="text" placeholder="Or create a new task… #tag !1" autocomplete="off" aria-label="Create a new task and switch to it" />
+      <button id="switch-new-add" class="ghost">Create &amp; switch</button>
+    </div>
+    <div class="dialog-actions">
+      <button id="switch-cancel" class="ghost">Cancel</button>
+    </div>`);
+
+  const search = overlay.querySelector<HTMLInputElement>("#switch-search")!;
+  const list = overlay.querySelector<HTMLDivElement>("#switch-list")!;
+  const newInput = overlay.querySelector<HTMLInputElement>("#switch-new")!;
+
+  const matches = (t: Task, q: string): boolean =>
+    !q || t.title.toLowerCase().includes(q) || t.tags.some((tag) => tag.includes(q));
+
+  const itemHtml = (t: Task): string =>
+    `<button type="button" class="switch-item${t.done ? " done" : ""}" data-switch="${t.id}">
+      <span class="switch-item-title">${escapeHtml(t.title)}</span>
+      <span class="switch-item-meta">P${t.priority}${t.done ? " · done" : ""}</span>
+    </button>`;
+
+  const renderList = (): void => {
+    const q = search.value.trim().toLowerCase();
+    const open = state.tasks
+      .filter((t) => !t.done && t.id !== session.taskId && matches(t, q))
+      .sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+    const done = state.tasks
+      .filter((t) => t.done && matches(t, q))
+      .sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0))
+      .slice(0, 20);
+    const doneHtml = done.length
+      ? `<div class="switch-group-title">Completed</div>${done.map(itemHtml).join("")}`
+      : "";
+    list.innerHTML = open.length
+      ? `${open.map(itemHtml).join("")}${doneHtml}`
+      : done.length
+        ? doneHtml
+        : `<p class="switch-empty">No matching tasks — create one below.</p>`;
+  };
+
+  renderList();
+  search.addEventListener("input", renderList);
+  search.focus();
+
+  list.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-switch]");
+    if (!btn?.dataset.switch) return;
+    overlay.remove();
+    switchSessionTask(session, btn.dataset.switch);
+  });
+
+  const createAndSwitch = (): void => {
+    const raw = newInput.value.trim();
+    if (!raw) return;
+    // buildAndAddTask re-renders the board, which also tears down this dialog;
+    // onCreated then attaches the new task to the still-running session.
+    buildAndAddTask(raw, { priority: 2, quadrant: "q2", quick: false }, (task) => {
+      switchSessionTask(session, task.id);
+    });
+  };
+  overlay.querySelector("#switch-new-add")!.addEventListener("click", createAndSwitch);
+  newInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      createAndSwitch();
+    }
+  });
+  overlay.querySelector("#switch-cancel")!.addEventListener("click", () => overlay.remove());
+}
+
+/**
+ * 0084: re-point the session at another task. The timer state (startedAt, pause
+ * state, pomodoro phase) is left untouched, so the clock carries on seamlessly.
+ */
+export function switchSessionTask(session: Session, taskId: string): void {
+  const task = taskById(taskId);
+  if (!task || task.id === session.taskId) return;
+  if (task.done) {
+    const overlay = openDialog(`
+      <h3>Switch to a completed task?</h3>
+      <p class="dialog-text">"${escapeHtml(task.title)}" is already marked done. Work on it again in this session?</p>
+      <div class="dialog-actions">
+        <button id="switch-done-cancel" class="ghost">Cancel</button>
+        <button id="switch-done-ok" class="primary">Switch</button>
+      </div>`);
+    overlay.querySelector("#switch-done-cancel")!.addEventListener("click", () => overlay.remove());
+    overlay.querySelector("#switch-done-ok")!.addEventListener("click", () => {
+      overlay.remove();
+      applySessionTask(session, task);
+    });
+    return;
+  }
+  applySessionTask(session, task);
+}
+
+function applySessionTask(session: Session, task: Task): void {
+  session.taskId = task.id;
+  setResumeHintVisible(true);
+  setDescriptionHintVisible(true);
+  persist();
+  render();
+  showSwitchToast(task);
+  announce(`Now working on ${task.title}`);
+}
+
+function showSwitchToast(task: Task): void {
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.innerHTML = `<span class="toast-text"><strong>Now working on</strong> · ${escapeHtml(task.title)}</span>`;
+  toastRegion().appendChild(toast);
+  window.setTimeout(() => toast.remove(), 2600);
+}
+
 /** 0077: explainer for the Flowtime vs Pomodoro technique chooser. */
 function openFlowtimeExplain(): void {
   const overlay = openDialog(`
@@ -1695,7 +1821,7 @@ function skipBreak(): void {
 function nextQuickTask(excludeId: string): Task | null {
   return (
     state.tasks
-      .filter((t) => t.quick && !t.done && t.id !== excludeId)
+      .filter((t) => t.quick && !t.done && !isFutureOpen(t) && t.id !== excludeId)
       .sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt)[0] ?? null
   );
 }
@@ -2142,6 +2268,9 @@ export function handleAction(
       break;
     case "start":
       if (id) promptStartSession(id);
+      break;
+    case "switch-task":
+      if (session) openSwitchTaskPicker(session);
       break;
     case "mark-done":
       if (id) markDoneAndFinish(id);

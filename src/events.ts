@@ -57,15 +57,15 @@ function handleShortcut(e: KeyboardEvent): void {
       render();
       return;
     }
-    if (focusMode) {
-      setFocusMode(false);
-      render();
-      return;
-    }
     const overlays = document.querySelectorAll(".overlay");
     const top = overlays[overlays.length - 1];
     if (top) {
       top.remove();
+      return;
+    }
+    if (focusMode) {
+      setFocusMode(false);
+      render();
       return;
     }
     (document.activeElement as HTMLElement | null)?.blur?.();
