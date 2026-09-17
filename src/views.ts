@@ -73,7 +73,7 @@ let lastViewKey: string | null = null;
 
 /** 0005: subtle night/day toggle pinned to the top-right corner in every view. */
 function themeToggleHtml(): string {
-  const isNight = settings.theme === "night";
+  const isNight = settings.themeMode === "dark";
   const label = isNight ? "Switch to day mode" : "Switch to night mode";
   return `<button class="corner-toggle" data-action="toggle-theme" title="${label}" aria-label="${label}" aria-pressed="${isNight ? "true" : "false"}">${icon(isNight ? "sun" : "moon")}</button>`;
 }
@@ -235,7 +235,7 @@ export function positionRowMenu(): void {
 }
 
 function pageHeaderHtml(): string {
-  const logoSrc = settings.theme === "day" ? "favicon-light.svg" : "favicon.svg";
+  const logoSrc = settings.themeMode === "light" ? "favicon-light.svg" : "favicon.svg";
   return `
     <header class="app-header">
       <div class="app-title">

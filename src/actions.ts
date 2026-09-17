@@ -59,11 +59,20 @@ import { doneSessions, sessionWorkMs, taskTotals } from "./stats";
 import { isFutureOpen, isTodayOpen } from "./tasks";
 import { MIN, formatDuration, snapshot, techniqueLabel } from "./timer";
 import type { SectionKey } from "./state";
-import type { Quadrant, Recurrence, Session, Settings, Task, Technique } from "./types";
+import type { Quadrant, Recurrence, Session, Settings, Task, Technique, ThemeToken } from "./types";
 import { QUADRANT_LABEL, newId } from "./types";
 import { notify, requestPermission } from "./notify";
 import { playCue } from "./sound";
 import { render, positionRowMenu } from "./views";
+import { icon } from "./icons";
+import { FONTS, fontById } from "./fonts";
+import {
+  allThemes,
+  findTheme,
+  parseThemeFile,
+  themeToJson,
+  uniqueThemeId,
+} from "./theme";
 
 /* ------------------------------------------------------------------ */
 /* Task parsing                                                        */
@@ -858,9 +867,9 @@ function openEditTask(id: string): void {
 const ISSUES_URL = "https://github.com/strosek/ultradiandrift/issues";
 
 function toggleTheme(): void {
-  settings.theme = settings.theme === "night" ? "day" : "night";
+  setSettings({ ...settings, themeMode: settings.themeMode === "dark" ? "light" : "dark" });
   saveSettings(settings);
-  applyTheme(settings.theme);
+  applyTheme();
   render();
 }
 
@@ -935,6 +944,7 @@ function openSettings(): void {
     <form id="settings-form">
       <div class="settings-tabs" role="tablist" aria-label="Settings sections">
         <button type="button" id="tab-basic" class="settings-tab" role="tab" aria-selected="true" aria-controls="panel-basic" data-tab="basic" tabindex="0">Basic</button>
+        <button type="button" id="tab-appearance" class="settings-tab" role="tab" aria-selected="false" aria-controls="panel-appearance" data-tab="appearance" tabindex="-1">Appearance</button>
         <button type="button" id="tab-advanced" class="settings-tab" role="tab" aria-selected="false" aria-controls="panel-advanced" data-tab="advanced" tabindex="-1">Advanced<span class="tab-count" aria-hidden="true"></span></button>
       </div>
 
@@ -1004,6 +1014,46 @@ function openSettings(): void {
         </div>
       </div>
 
+      <div id="panel-appearance" class="settings-panel" role="tabpanel" aria-labelledby="tab-appearance" hidden>
+        <div class="settings-grid">
+          <label class="field">
+            <span>Theme</span>
+            <select id="set-theme">
+              ${allThemes(settings.customThemes)
+                .map(
+                  (t) =>
+                    `<option value="${escapeHtml(t.id)}"${t.id === settings.themeId ? " selected" : ""}>${escapeHtml(t.name)}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Mode</span>
+            <select id="set-mode">
+              <option value="dark"${settings.themeMode === "dark" ? " selected" : ""}>Dark</option>
+              <option value="light"${settings.themeMode === "light" ? " selected" : ""}>Light</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Font</span>
+            <select id="set-font">
+              ${FONTS.map(
+                (f) =>
+                  `<option value="${f.id}"${f.id === settings.font ? " selected" : ""}>${escapeHtml(f.label)}</option>`,
+              ).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="theme-preview" id="theme-preview" aria-hidden="true"></div>
+        <p class="field-hint font-preview" id="font-preview">The quick brown fox jumps over the lazy dog.</p>
+        <h4 class="dialog-section">Theme files</h4>
+        <div class="data-actions">
+          <button type="button" id="btn-theme-load" class="ghost">Load theme file…</button>
+          <button type="button" id="btn-theme-export" class="ghost">Export theme</button>
+          <button type="button" id="btn-theme-remove" class="ghost" hidden>Remove theme</button>
+        </div>
+      </div>
+
       <div id="panel-advanced" class="settings-panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
         <h4 class="dialog-section">Data</h4>
         <div class="data-actions">
@@ -1042,27 +1092,28 @@ function openSettings(): void {
   // 0076: Basic / Advanced tabs — panels are toggled (never rebuilt) so typed
   // values survive switching; arrow keys move between tabs (roving tabindex).
   const tabs = Array.from(overlay.querySelectorAll<HTMLButtonElement>(".settings-tab"));
-  const panels = {
+  type TabName = "basic" | "appearance" | "advanced";
+  const panels: Record<TabName, HTMLElement> = {
     basic: overlay.querySelector<HTMLElement>("#panel-basic")!,
+    appearance: overlay.querySelector<HTMLElement>("#panel-appearance")!,
     advanced: overlay.querySelector<HTMLElement>("#panel-advanced")!,
   };
-  const showTab = (name: "basic" | "advanced"): void => {
+  const showTab = (name: TabName): void => {
     for (const tab of tabs) {
       const on = tab.dataset.tab === name;
       tab.setAttribute("aria-selected", on ? "true" : "false");
       tab.tabIndex = on ? 0 : -1;
     }
-    panels.basic.hidden = name !== "basic";
-    panels.advanced.hidden = name !== "advanced";
+    for (const [key, panel] of Object.entries(panels)) panel.hidden = key !== name;
   };
   tabs.forEach((tab, i) => {
-    tab.addEventListener("click", () => showTab(tab.dataset.tab as "basic" | "advanced"));
+    tab.addEventListener("click", () => showTab(tab.dataset.tab as TabName));
     tab.addEventListener("keydown", (e) => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       e.preventDefault();
       const next =
         e.key === "ArrowRight" ? (i + 1) % tabs.length : (i - 1 + tabs.length) % tabs.length;
-      showTab(tabs[next].dataset.tab as "basic" | "advanced");
+      showTab(tabs[next].dataset.tab as TabName);
       tabs[next].focus();
     });
   });
@@ -1072,6 +1123,152 @@ function openSettings(): void {
       overlay.querySelectorAll("#panel-advanced .data-actions > *").length,
     );
   }
+
+  // 0085: Appearance tab. Theme, mode and font apply live (no Save needed).
+  const themeSelect = overlay.querySelector<HTMLSelectElement>("#set-theme")!;
+  const modeSelect = overlay.querySelector<HTMLSelectElement>("#set-mode")!;
+  const fontSelect = overlay.querySelector<HTMLSelectElement>("#set-font")!;
+  const previewEl = overlay.querySelector<HTMLElement>("#theme-preview")!;
+  const fontPreview = overlay.querySelector<HTMLElement>("#font-preview")!;
+  const removeThemeBtn = overlay.querySelector<HTMLButtonElement>("#btn-theme-remove")!;
+  const loadThemeBtn = overlay.querySelector<HTMLButtonElement>("#btn-theme-load")!;
+  const exportThemeBtn = overlay.querySelector<HTMLButtonElement>("#btn-theme-export")!;
+
+  const PREVIEW_TOKENS: ThemeToken[] = [
+    "bg",
+    "surface",
+    "border",
+    "text",
+    "accent",
+    "moss",
+    "leaf",
+    "earth",
+    "gold",
+  ];
+
+  function rebuildThemeOptions(): void {
+    themeSelect.innerHTML = allThemes(settings.customThemes)
+      .map(
+        (t) =>
+          `<option value="${escapeHtml(t.id)}"${t.id === settings.themeId ? " selected" : ""}>${escapeHtml(t.name)}</option>`,
+      )
+      .join("");
+  }
+
+  function refreshThemeControls(): void {
+    const theme = findTheme(settings.themeId, settings.customThemes);
+    const colors = settings.themeMode === "light" ? theme.light : theme.dark;
+    themeSelect.value = settings.themeId;
+    modeSelect.value = settings.themeMode;
+    fontSelect.value = settings.font;
+    previewEl.innerHTML = PREVIEW_TOKENS.map(
+      (t) => `<span style="background:${colors[t]}"></span>`,
+    ).join("");
+    fontPreview.style.fontFamily = fontById(settings.font).body;
+    removeThemeBtn.hidden = !settings.customThemes.some((t) => t.id === settings.themeId);
+  }
+
+  // A full render() would wipe this overlay (it lives inside #app), so update the
+  // header logo and corner toggle in place instead.
+  function refreshChrome(): void {
+    const logo = document.querySelector<HTMLImageElement>(".app-header .logo");
+    if (logo) logo.src = settings.themeMode === "light" ? "favicon-light.svg" : "favicon.svg";
+    const btn = document.querySelector<HTMLButtonElement>('[data-action="toggle-theme"]');
+    if (btn) {
+      const isNight = settings.themeMode === "dark";
+      const label = isNight ? "Switch to day mode" : "Switch to night mode";
+      btn.title = label;
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("aria-pressed", String(isNight));
+      btn.innerHTML = icon(isNight ? "sun" : "moon");
+    }
+  }
+
+  function applyAppearanceNow(): void {
+    saveSettings(settings);
+    applyTheme();
+    refreshThemeControls();
+    refreshChrome();
+  }
+
+  themeSelect.addEventListener("change", () => {
+    const theme = findTheme(themeSelect.value, settings.customThemes);
+    setSettings({
+      ...settings,
+      themeId: theme.id,
+      themeMode: theme.defaultMode,
+      font: theme.font ?? settings.font,
+    });
+    applyAppearanceNow();
+  });
+
+  modeSelect.addEventListener("change", () => {
+    setSettings({ ...settings, themeMode: modeSelect.value === "light" ? "light" : "dark" });
+    applyAppearanceNow();
+  });
+
+  fontSelect.addEventListener("change", () => {
+    setSettings({ ...settings, font: fontSelect.value });
+    applyAppearanceNow();
+  });
+
+  loadThemeBtn.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = parseThemeFile(String(reader.result ?? ""));
+        if (!result.ok) {
+          showImportError(result.error);
+          return;
+        }
+        const theme = { ...result.theme, id: uniqueThemeId(result.theme.name, settings.customThemes) };
+        const customThemes = [
+          ...settings.customThemes.filter((t) => t.name !== theme.name),
+          theme,
+        ].slice(-20);
+        setSettings({
+          ...settings,
+          customThemes,
+          themeId: theme.id,
+          themeMode: theme.defaultMode,
+          font: theme.font ?? settings.font,
+        });
+        saveSettings(settings);
+        applyTheme();
+        rebuildThemeOptions();
+        refreshThemeControls();
+        refreshChrome();
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  });
+
+  exportThemeBtn.addEventListener("click", () => {
+    const theme = findTheme(settings.themeId, settings.customThemes);
+    downloadTextFile(`${theme.id}.theme.json`, themeToJson(theme), "application/json");
+  });
+
+  removeThemeBtn.addEventListener("click", () => {
+    if (!settings.customThemes.some((t) => t.id === settings.themeId)) return;
+    setSettings({
+      ...settings,
+      customThemes: settings.customThemes.filter((t) => t.id !== settings.themeId),
+      themeId: "forest",
+    });
+    saveSettings(settings);
+    applyTheme();
+    rebuildThemeOptions();
+    refreshThemeControls();
+    refreshChrome();
+  });
+
+  refreshThemeControls();
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1207,7 +1404,7 @@ function openSettings(): void {
       setSettings(backup.settings);
       persist();
       saveSettings(settings);
-      applyTheme(settings.theme);
+      applyTheme();
       resetTransientState();
       confirm.remove();
       overlay.remove();
@@ -1256,7 +1453,7 @@ function openSettings(): void {
           setSettings(snap.backup.settings);
           persist();
           saveSettings(settings);
-          applyTheme(settings.theme);
+          applyTheme();
           resetTransientState();
           removeSnapshot(snap.key);
           confirm.remove();
@@ -1306,7 +1503,7 @@ function confirmImport(
     setSettings(payload.settings);
     persist();
     saveSettings(settings);
-    applyTheme(settings.theme);
+    applyTheme();
     resetTransientState();
     settingsOverlay.remove();
     render();
@@ -1350,7 +1547,7 @@ export async function loadExampleData(): Promise<void> {
     setSettings(result.payload.settings);
     persist();
     saveSettings(settings);
-    applyTheme(settings.theme);
+    applyTheme();
     resetTransientState();
     overlay.remove();
     render();

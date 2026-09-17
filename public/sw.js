@@ -6,7 +6,16 @@ self.addEventListener("install", (event) => {
     caches
       .open(CACHE)
       .then((cache) =>
-        cache.addAll(["./", "./favicon.svg", "./favicon-light.svg", "./manifest.webmanifest"]),
+        cache.addAll([
+          "./",
+          "./favicon.svg",
+          "./favicon-light.svg",
+          "./manifest.webmanifest",
+          "./fonts/lexend-latin.woff2",
+          "./fonts/lexend-latin-ext.woff2",
+          "./fonts/atkinson-latin.woff2",
+          "./fonts/atkinson-latin-ext.woff2",
+        ]),
       )
       .then(() => self.skipWaiting()),
   );

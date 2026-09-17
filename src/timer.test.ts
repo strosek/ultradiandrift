@@ -153,7 +153,10 @@ describe("configFromSettings", () => {
       maxFlowtimeMin: 0,
       flowtimeNudgeMin: 90,
       distractionLogEnabled: false,
-      theme: "night",
+      themeId: "forest",
+      themeMode: "dark",
+      font: "rounded",
+      customThemes: [],
     };
     expect(configFromSettings(settings)).toEqual(BASE_CONFIG);
   });

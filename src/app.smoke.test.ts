@@ -36,14 +36,16 @@ describe("app bootstrap", () => {
 
   it("toggles the theme from the header button", async () => {
     await import("./main");
-    const { settings } = await import("./state");
+    const state = await import("./state");
 
-    const before = settings.theme;
+    const before = state.settings.themeMode;
     const btn = document.querySelector<HTMLElement>('[data-action="toggle-theme"]')!;
-    expect(btn.getAttribute("aria-pressed")).toBe(before === "night" ? "true" : "false");
+    expect(btn.getAttribute("aria-pressed")).toBe(before === "dark" ? "true" : "false");
 
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(settings.theme).not.toBe(before);
-    expect(document.documentElement.dataset.theme).toBe(settings.theme);
+    expect(state.settings.themeMode).not.toBe(before);
+    expect(document.documentElement.dataset.theme).toBe(
+      state.settings.themeMode === "light" ? "day" : "night",
+    );
   });
 });

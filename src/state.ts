@@ -1,4 +1,5 @@
 import { loadSettings, loadState, saveState } from "./storage";
+import { applyAppearance, findTheme } from "./theme";
 import { configFromSettings } from "./timer";
 import type { TimerConfig } from "./timer";
 import type {
@@ -153,8 +154,13 @@ export function timerConfig(): TimerConfig {
   return configFromSettings(settings);
 }
 
-export function applyTheme(theme: Settings["theme"]): void {
-  document.documentElement.dataset.theme = theme;
+/** 0085: apply the active theme, mode, and font from the current settings. */
+export function applyTheme(): void {
+  applyAppearance(
+    findTheme(settings.themeId, settings.customThemes),
+    settings.themeMode,
+    settings.font,
+  );
 }
 
 export type { Phase };

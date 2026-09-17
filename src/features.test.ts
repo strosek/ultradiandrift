@@ -176,6 +176,11 @@ describe("settings tabs (0076)", () => {
     overlay
       .querySelector<HTMLElement>("#tab-basic")!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(overlay.querySelector("#panel-appearance")!.hasAttribute("hidden")).toBe(false);
+    expect(overlay.querySelector("#tab-appearance")!.getAttribute("aria-selected")).toBe("true");
+    overlay
+      .querySelector<HTMLElement>("#tab-appearance")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     expect(overlay.querySelector("#panel-advanced")!.hasAttribute("hidden")).toBe(false);
     overlay.remove();
   });
@@ -191,6 +196,69 @@ describe("settings tabs (0076)", () => {
       .querySelector<HTMLElement>("#tab-basic")!
       .dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(overlay.querySelector<HTMLInputElement>("#set-work")!.value).toBe("33");
+    overlay.remove();
+  });
+});
+
+describe("appearance settings (0085)", () => {
+  const openSettings = (): HTMLElement => {
+    document
+      .querySelector<HTMLElement>('[data-action="open-settings"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return document.querySelector<HTMLElement>(".overlay")!;
+  };
+
+  it("lists the built-in themes and applies theme, mode, and font live", async () => {
+    const state = await import("./state");
+    const overlay = openSettings();
+    const themeSelect = overlay.querySelector<HTMLSelectElement>("#set-theme")!;
+    expect(themeSelect.options.length).toBeGreaterThanOrEqual(6);
+    expect(themeSelect.value).toBe("forest");
+
+    themeSelect.value = "tide";
+    themeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(state.settings.themeId).toBe("tide");
+    expect(document.documentElement.dataset.theme).toBe("night");
+    expect(document.getElementById("theme-vars")).not.toBeNull();
+
+    const modeSelect = overlay.querySelector<HTMLSelectElement>("#set-mode")!;
+    modeSelect.value = "light";
+    modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(state.settings.themeMode).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("day");
+
+    const fontSelect = overlay.querySelector<HTMLSelectElement>("#set-font")!;
+    fontSelect.value = "mono";
+    fontSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(state.settings.font).toBe("mono");
+    expect(document.documentElement.dataset.font).toBe("mono");
+
+    overlay.remove();
+  });
+
+  it("removes a custom theme and falls back to Forest", async () => {
+    const state = await import("./state");
+    const { sanitizeTheme } = await import("./theme");
+    const custom = sanitizeTheme({
+      name: "Mine",
+      dark: { bg: "#101010" },
+      light: { bg: "#fafafa" },
+    })!;
+    const { setSettings } = state;
+    setSettings({
+      ...state.settings,
+      customThemes: [custom],
+      themeId: custom.id,
+      themeMode: "dark",
+    });
+
+    const overlay = openSettings();
+    const removeBtn = overlay.querySelector<HTMLButtonElement>("#btn-theme-remove")!;
+    expect(removeBtn.hidden).toBe(false);
+    removeBtn.click();
+
+    expect(state.settings.themeId).toBe("forest");
+    expect(state.settings.customThemes).toHaveLength(0);
     overlay.remove();
   });
 });

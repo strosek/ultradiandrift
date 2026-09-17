@@ -4,7 +4,47 @@ export type Technique = "pomodoro" | "flowtime";
 
 export type SessionStatus = "running" | "paused" | "done";
 
-export type Theme = "night" | "day";
+/** 0085: a light/dark variant. `dark` renders under `:root`, `light` under `[data-theme="day"]`. */
+export type ThemeMode = "dark" | "light";
+
+/** 0085: the color tokens a theme controls (CSS custom properties without the `--`). */
+export const THEME_TOKENS = [
+  "bg-glow",
+  "bg",
+  "bg-soft",
+  "surface",
+  "surface-2",
+  "border",
+  "text",
+  "text-dim",
+  "text-faint",
+  "accent",
+  "accent-hover",
+  "accent-bright",
+  "on-accent",
+  "moss",
+  "leaf",
+  "earth",
+  "clay",
+  "gold",
+  "danger",
+  "shadow",
+  "overlay",
+] as const;
+
+export type ThemeToken = (typeof THEME_TOKENS)[number];
+
+export type ThemeColors = Record<ThemeToken, string>;
+
+/** 0085: a full theme — the same shape users import and export. */
+export interface Theme {
+  id: string;
+  name: string;
+  defaultMode: ThemeMode;
+  font?: string; // optional font suggestion applied when the theme is selected
+  dark: ThemeColors;
+  light: ThemeColors;
+}
 
 export type SoundPreset = "chime" | "soft" | "breeze";
 
@@ -128,7 +168,10 @@ export interface Settings {
   maxFlowtimeMin: number; // 0021: cap flowtime length (0 = off)
   flowtimeNudgeMin: number; // 0054: gentle "okay to stop" reminder (0 = off)
   distractionLogEnabled: boolean; // 0081: park distractions during sessions
-  theme: Theme;
+  themeId: string; // 0085: active theme (built-in or custom id)
+  themeMode: ThemeMode; // 0085: active dark/light variant
+  font: string; // 0085: active UI font pairing id
+  customThemes: Theme[]; // 0085: themes imported from files
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -145,7 +188,10 @@ export const DEFAULT_SETTINGS: Settings = {
   maxFlowtimeMin: 0,
   flowtimeNudgeMin: 90,
   distractionLogEnabled: false,
-  theme: "night",
+  themeId: "forest",
+  themeMode: "dark",
+  font: "rounded",
+  customThemes: [],
 };
 
 export interface ExportPayload {

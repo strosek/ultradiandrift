@@ -63,10 +63,23 @@ describe("sanitizeSettings", () => {
     ).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("rejects invalid sound presets and themes", () => {
+  it("rejects invalid sound presets and unknown themes", () => {
     const s = sanitizeSettings({ ...VALID_SETTINGS, soundPreset: "bogus", theme: "purple" });
     expect(s.soundPreset).toBe("chime");
-    expect(s.theme).toBe("night");
+    expect(s.themeId).toBe("forest");
+    expect(s.themeMode).toBe("dark");
+  });
+
+  it("migrates the legacy day theme to Forest light", () => {
+    const s = sanitizeSettings({ pomodoroWorkMin: 30, theme: "day" });
+    expect(s.themeId).toBe("forest");
+    expect(s.themeMode).toBe("light");
+  });
+
+  it("validates themeId and font against known ids", () => {
+    const s = sanitizeSettings({ themeId: "nope", font: "nope" });
+    expect(s.themeId).toBe("forest");
+    expect(s.font).toBe("rounded");
   });
 
   it("sanitizes flowtimeNudgeMin and defaults it to 90", () => {

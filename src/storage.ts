@@ -8,7 +8,10 @@ import type {
   Settings,
   Task,
   TaskCompletion,
+  Theme,
 } from "./types";
+import { DEFAULT_FONT_ID, isFontId } from "./fonts";
+import { DEFAULT_THEME_ID, isBuiltinTheme, sanitizeTheme, uniqueThemeId } from "./theme";
 
 const PRESETS = ["chime", "soft", "breeze"] as const;
 const DAY_MS = 86_400_000;
@@ -127,9 +130,36 @@ function str(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/** 0085: at most this many imported themes are kept. */
+const CUSTOM_THEMES_MAX = 20;
+
+function sanitizeCustomThemes(raw: unknown): Theme[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Theme[] = [];
+  for (const item of raw) {
+    if (out.length >= CUSTOM_THEMES_MAX) break;
+    const theme = sanitizeTheme(item);
+    if (!theme) continue;
+    out.push({ ...theme, id: uniqueThemeId(theme.name, out) });
+  }
+  return out;
+}
+
 /** Merge an arbitrary (possibly partial) settings value into valid settings with clamped bounds. */
 export function sanitizeSettings(raw: unknown): Settings {
   const s = (typeof raw === "object" && raw !== null ? raw : {}) as Partial<Settings>;
+  const legacy = s as Record<string, unknown>;
+  const customThemes = sanitizeCustomThemes(legacy.customThemes);
+  // 0085 migration: the old `theme: "night" | "day"` becomes Forest's dark/light mode.
+  const legacyMode = legacy.theme === "day" ? "light" : "dark";
+  const themeId =
+    typeof s.themeId === "string" &&
+    s.themeId &&
+    (isBuiltinTheme(s.themeId) || customThemes.some((t) => t.id === s.themeId))
+      ? s.themeId
+      : DEFAULT_THEME_ID;
+  const themeMode =
+    s.themeMode === "light" || s.themeMode === "dark" ? s.themeMode : legacyMode;
   return {
     pomodoroWorkMin: clampNum(s.pomodoroWorkMin, 1, 120, DEFAULT_SETTINGS.pomodoroWorkMin),
     pomodoroShortBreakMin: clampNum(
@@ -166,7 +196,10 @@ export function sanitizeSettings(raw: unknown): Settings {
       typeof s.distractionLogEnabled === "boolean"
         ? s.distractionLogEnabled
         : DEFAULT_SETTINGS.distractionLogEnabled,
-    theme: s.theme === "day" ? "day" : "night",
+    themeId,
+    themeMode,
+    font: isFontId(s.font) ? s.font : DEFAULT_FONT_ID,
+    customThemes,
   };
 }
 

@@ -61,7 +61,7 @@ window.addEventListener("storage", (e) => {
     setState(loadState());
   } else if (e.key === SETTINGS_KEY) {
     setSettings(loadSettings());
-    applyTheme(settings.theme);
+    applyTheme();
   } else if (e.key === BACKUP_KEY) {
     return; // backups are transient; nothing to re-render
   } else {
@@ -71,7 +71,7 @@ window.addEventListener("storage", (e) => {
   render();
 });
 
-applyTheme(settings.theme);
+applyTheme();
 saveDailySnapshot(settings, state);
 render();
 syncTransientState();
