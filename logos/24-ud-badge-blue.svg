@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift app icon, blue">
+  <title>UD badge — blue</title>
+  <rect x="4" y="4" width="120" height="120" rx="30" fill="#0b1c26"/>
+  <rect x="4.5" y="4.5" width="119" height="119" rx="29.5" fill="none" stroke="#35708a" stroke-width="3"/>
+  <g fill="none" stroke="#35708a" stroke-width="4" stroke-linecap="round">
+    <path d="M22 94 C36 84 50 84 64 94 C78 104 92 104 106 94"/>
+    <path d="M22 106 C36 96 50 96 64 106 C78 116 92 116 106 106"/>
+  </g>
+  <g fill="none" stroke="#a8cfe0" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M27 18 L27 55.5 C27 80.17 64 80.17 64 55.5 L64 18"/>
+    <path d="M64 18 L64 74 C84.4 74 101 61.5 101 46 C101 30.5 84.4 18 64 18"/>
+  </g>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift U D monogram">
+  <title>UD shared stem</title>
+  <!-- U and D share the middle vertical: one continuous breath of a wave. -->
+  <g fill="none" stroke="#a3c585" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 38 L34 74 C34 92 56 92 56 74 L56 38"/>
+    <path d="M56 38 L56 90 C84 90 96 80 96 64 C96 48 84 38 56 38"/>
+  </g>
+</svg>

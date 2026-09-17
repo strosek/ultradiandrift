@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift">
-  <title>UltradianDrift</title>
-  <!-- Forest badge: equal-width U and D share a stem above a quiet ripple. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift app icon">
+  <title>UD badge</title>
+  <!-- Dark tile. Equal-width U and D fill the same span as the ripples below. -->
   <rect x="4" y="4" width="120" height="120" rx="30" fill="#0f1a14"/>
   <rect x="4.5" y="4.5" width="119" height="119" rx="29.5" fill="none" stroke="#2f6e4f" stroke-width="3"/>
   <g fill="none" stroke="#2f6e4f" stroke-width="4" stroke-linecap="round">

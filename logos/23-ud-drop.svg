@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift U D monogram">
+  <title>UD drop</title>
+  <!-- A droplet holds the monogram, like rest held inside a working wave. -->
+  <path d="M64 16 C64 16 97 54 97 79 A33 33 0 0 1 31 79 C31 54 64 16 64 16 Z"
+        fill="none" stroke="#5d9c59" stroke-width="6" stroke-linejoin="round"/>
+  <g fill="none" stroke="#a3c585" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M47 66 L47 84 C47 93 60 93 60 84 L60 66"/>
+    <path d="M60 66 L60 92 C76 92 85 86 85 78 C85 70 76 66 60 66"/>
+  </g>
+</svg>

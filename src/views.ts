@@ -235,10 +235,11 @@ export function positionRowMenu(): void {
 }
 
 function pageHeaderHtml(): string {
+  const logoSrc = settings.theme === "day" ? "favicon-light.svg" : "favicon.svg";
   return `
     <header class="app-header">
       <div class="app-title">
-        <img class="logo" src="favicon.svg" alt="UltradianDrift logo" />
+        <img class="logo" src="${logoSrc}" alt="UltradianDrift logo" />
         <div>
           <h1>UltradianDrift</h1>
           <p class="tagline">Work in sync with your natural rhythm.</p>

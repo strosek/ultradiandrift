@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift U D monogram">
+  <title>UD two-tone ribbon</title>
+  <!-- One shared stem: the U in moss, the D's bowl flowing off it in light green. -->
+  <g fill="none" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M34 38 L34 74 C34 92 56 92 56 74 L56 38" stroke="#5d9c59"/>
+    <path d="M56 38 L56 90" stroke="#5d9c59"/>
+    <path d="M56 38 C84 38 96 48 96 64 C96 80 84 90 56 90" stroke="#a3c585"/>
+  </g>
+</svg>

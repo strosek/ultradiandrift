@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift U D monogram">
+  <title>UD on a wave</title>
+  <!-- U D ride a flowing current beneath them. -->
+  <g fill="none" stroke="#a3c585" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 30 L32 62 C32 78 52 78 52 62 L52 30"/>
+    <path d="M52 30 L52 78 C78 78 90 68 90 54 C90 40 78 30 52 30"/>
+  </g>
+  <path d="M12 104 C24 92 36 92 48 104 C60 116 72 116 84 104 C92 96 104 96 116 104"
+        fill="none" stroke="#5d9c59" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UltradianDrift">
+  <title>UD badge — maskable</title>
+  <!-- Maskable: full-bleed background, monogram scaled inside the 80% safe circle. -->
+  <rect width="128" height="128" fill="#0f1a14"/>
+  <g transform="translate(16 17.5) scale(0.75)">
+    <g fill="none" stroke="#2f6e4f" stroke-width="4" stroke-linecap="round">
+      <path d="M22 94 C36 84 50 84 64 94 C78 104 92 104 106 94"/>
+      <path d="M22 106 C36 96 50 96 64 106 C78 116 92 116 106 106"/>
+    </g>
+    <g fill="none" stroke="#a3c585" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M27 18 L27 55.5 C27 80.17 64 80.17 64 55.5 L64 18"/>
+      <path d="M64 18 L64 74 C84.4 74 101 61.5 101 46 C101 30.5 84.4 18 64 18"/>
+    </g>
+  </g>
+</svg>
