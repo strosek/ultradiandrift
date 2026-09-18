@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08170f" />
+      <stop offset="1" stop-color="#173a26" />
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f6e4f" />
+      <stop offset="1" stop-color="#123222" />
+    </linearGradient>
+    <linearGradient id="leaf2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3f8a5f" />
+      <stop offset="1" stop-color="#1a4a30" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)" />
+  <g stroke="#bfe3c6" stroke-opacity="0.18" stroke-width="2" stroke-linecap="round">
+    <path d="M180 40 L140 220" /><path d="M360 10 L330 170" /><path d="M560 60 L520 240" />
+    <path d="M780 20 L750 190" /><path d="M980 70 L950 250" /><path d="M1180 30 L1150 200" />
+    <path d="M1380 80 L1350 260" /><path d="M1500 20 L1470 180" /><path d="M70 160 L40 320" />
+    <path d="M700 320 L670 480" /><path d="M1080 340 L1050 500" /><path d="M300 400 L270 560" />
+  </g>
+  <g fill="url(#leaf)">
+    <path d="M150 640 C160 460 320 380 470 430 C520 560 380 720 150 640 Z" />
+    <path d="M880 680 C900 500 1070 430 1230 490 C1270 620 1110 770 880 680 Z" />
+  </g>
+  <g fill="url(#leaf2)">
+    <path d="M420 780 C430 640 560 570 700 620 C740 730 610 850 420 780 Z" />
+    <path d="M1120 800 C1140 660 1280 600 1420 660 C1450 770 1310 870 1120 800 Z" />
+  </g>
+  <g fill="#dff3e2" opacity="0.5">
+    <circle cx="250" cy="560" r="6" /><circle cx="330" cy="620" r="4" />
+    <circle cx="980" cy="600" r="6" /><circle cx="1060" cy="660" r="4" />
+    <circle cx="560" cy="700" r="5" /><circle cx="1300" cy="720" r="5" />
+  </g>
+</svg>

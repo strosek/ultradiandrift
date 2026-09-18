@@ -22,6 +22,7 @@ import {
 import { formatDay, formatTimeOfDay, startOfLocalDay, startOfWeek } from "./dates";
 import { escapeHtml } from "./escape";
 import { icon } from "./icons";
+import { backgroundSrc } from "./backgrounds";
 import { parseQuickAdd } from "./parse";
 import { isOnboarded } from "./storage";
 import {
@@ -101,6 +102,7 @@ function renderView(key: string, html: string): void {
   app.innerHTML = `${html}<div class="corner-toggles">${focusToggleHtml()}${themeToggleHtml()}</div>`;
   if (changed) {
     for (const child of Array.from(app.children)) {
+      if (child.classList.contains("rest-bg")) continue;
       child.classList.add("view-enter");
     }
   }
@@ -1311,11 +1313,13 @@ function renderSession(session: Session): void {
 
 function renderBreak(): void {
   if (!breakState) return;
+  const background = restBackgroundHtml();
   if (breakState.done) {
     updateDocumentTitle(null);
     renderView(
       "break",
       `
+      ${background}
       <main class="session-main">
         <header class="session-header">
           <h2 class="session-task-title">Break over</h2>
@@ -1337,6 +1341,7 @@ function renderBreak(): void {
   renderView(
     "break",
     `
+    ${background}
     <main class="session-main">
       <header class="session-header">
         <h2 class="session-task-title">Break</h2>
@@ -1351,6 +1356,20 @@ function renderBreak(): void {
     </main>
     <p class="shortcut-hint"><span class="hint-text"><strong>F</strong> continue focusing</span>${koFiHtml()}</p>`,
   );
+}
+
+/** 0086: optional nature image layer behind the rest/break screen. */
+function restBackgroundHtml(): string {
+  const id =
+    settings.themeMode === "light" ? settings.restBackgroundLight : settings.restBackgroundDark;
+  const src = backgroundSrc(id);
+  if (!src) return "";
+  const dim = Math.min(1, Math.max(0, settings.restBackgroundDim / 100));
+  const blur = Math.min(20, Math.max(0, settings.restBackgroundBlur));
+  return `<div class="rest-bg" aria-hidden="true" style="--rest-dim:${dim};--rest-blur:${blur}px">
+    <div class="rest-bg-image" style="background-image:url('${escapeHtml(src)}')"></div>
+    <div class="rest-bg-scrim"></div>
+  </div>`;
 }
 
 function renderQuickRun(): void {

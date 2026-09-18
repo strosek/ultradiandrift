@@ -936,6 +936,39 @@ button.primary.icon-btn:hover {
   gap: 8px;
 }
 
+/* 0086: optional nature image behind the rest/break clock. Fixed to the viewport
+   with a negative z-index so it sits above the body background but behind the
+   session content; the scrim uses the active theme's background color. */
+.rest-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rest-bg-image {
+  position: absolute;
+  inset: -6%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(var(--rest-blur, 0px));
+  transform: scale(1.06);
+}
+
+.rest-bg-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: max(0.12, var(--rest-dim, 0.45));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-bg-image {
+    transform: none;
+  }
+}
+
 /* Lower, quieter row for secondary break-screen actions. */
 .aux-action {
   display: inline-flex;
@@ -1252,6 +1285,135 @@ button.primary.icon-btn:hover {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+.inline-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 0086: rest-background picker, preview and custom-image list. */
+
+.bg-preview {
+  position: relative;
+  height: 120px;
+  margin: 4px 0 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.bg-preview-image {
+  position: absolute;
+  inset: -6%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(var(--rest-blur, 0px));
+  transform: scale(1.06);
+}
+
+.bg-preview-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: max(0.12, var(--rest-dim, 0.45));
+}
+
+.bg-preview-none {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+}
+
+.bg-pickers {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.bg-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.bg-tile {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-2);
+  background-size: cover;
+  background-position: center;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.bg-tile.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.bg-tile.none {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.bg-tile-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 4px;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bg-tile-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  color: var(--on-accent);
+  background: var(--accent-bright);
+}
+
+.bg-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: var(--text-sm);
+}
+
+.bg-custom-row .bg-custom-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bg-custom-row select {
+  flex: none;
 }
 
 .data-actions {

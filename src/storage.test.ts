@@ -91,6 +91,54 @@ describe("sanitizeSettings", () => {
       DEFAULT_SETTINGS.flowtimeNudgeMin,
     );
   });
+
+  it("keeps rest-background slots and validates them against known images", () => {
+    const withBackgrounds = {
+      ...VALID_SETTINGS,
+      customBackgrounds: [{ id: "custom:one", name: "My beach", addedAt: 5, mode: "dark" }],
+      restBackgroundDark: "custom:one",
+      restBackgroundLight: "ocean-waves",
+    };
+    const s = sanitizeSettings(withBackgrounds);
+    expect(s.restBackgroundDark).toBe("custom:one");
+    expect(s.restBackgroundLight).toBe("ocean-waves");
+    expect(s.customBackgrounds[0]).toEqual({
+      id: "custom:one",
+      name: "My beach",
+      addedAt: 5,
+      mode: "dark",
+    });
+
+    const unknown = sanitizeSettings({
+      ...VALID_SETTINGS,
+      restBackgroundDark: "nope",
+      restBackgroundLight: "custom:missing",
+    });
+    expect(unknown.restBackgroundDark).toBe("none");
+    expect(unknown.restBackgroundLight).toBe("none");
+  });
+
+  it("clamps rest-background dim and blur and repairs custom metadata", () => {
+    const s = sanitizeSettings({
+      ...VALID_SETTINGS,
+      restBackgroundDim: 500,
+      restBackgroundBlur: -4,
+      customBackgrounds: [
+        { id: "custom:a", name: "  ", addedAt: "nope", mode: "sideways" },
+        { id: "custom:a", name: "dupe", addedAt: 1, mode: "both" },
+        { id: "not-custom", name: "bad", addedAt: 1, mode: "both" },
+      ],
+    });
+    expect(s.restBackgroundDim).toBe(100);
+    expect(s.restBackgroundBlur).toBe(0);
+    expect(s.customBackgrounds).toHaveLength(1);
+    expect(s.customBackgrounds[0]).toEqual({
+      id: "custom:a",
+      name: "Image",
+      addedAt: expect.any(Number),
+      mode: "both",
+    });
+  });
 });
 
 describe("sanitizeState", () => {
@@ -277,7 +325,9 @@ describe("parseImport", () => {
   });
 
   it("rejects exports missing data arrays", () => {
-    expect(parseImport(JSON.stringify({ app: "ultradiandrift", version: 1, data: {} })).ok).toBe(false);
+    expect(parseImport(JSON.stringify({ app: "ultradiandrift", version: 1, data: {} })).ok).toBe(
+      false,
+    );
   });
 
   it("parses a valid export and sanitizes it", () => {
@@ -385,7 +435,7 @@ describe("persistence", () => {
       plannedFor: null,
       recurrence: null,
       order: 0,
-          completions: [],
+      completions: [],
     });
     saveDailySnapshot(VALID_SETTINGS, state);
     const [entry] = loadSnapshots();

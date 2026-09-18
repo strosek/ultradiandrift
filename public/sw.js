@@ -1,5 +1,5 @@
 /* UltradianDrift service worker — offline-first static caching (0050). */
-const CACHE = "ultradiandrift-v1";
+const CACHE = "ultradiandrift-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -15,6 +15,14 @@ self.addEventListener("install", (event) => {
           "./fonts/lexend-latin-ext.woff2",
           "./fonts/atkinson-latin.woff2",
           "./fonts/atkinson-latin-ext.woff2",
+          "./backgrounds/forest-stream.svg",
+          "./backgrounds/misty-pines.svg",
+          "./backgrounds/ocean-waves.svg",
+          "./backgrounds/mountain-lake.svg",
+          "./backgrounds/meadow.svg",
+          "./backgrounds/rain-leaves.svg",
+          "./backgrounds/desert-dunes.svg",
+          "./backgrounds/night-sky.svg",
         ]),
       )
       .then(() => self.skipWaiting()),

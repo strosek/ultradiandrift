@@ -14,27 +14,14 @@ import {
   weekTotals,
 } from "./stats";
 import type { AppState, Session, Settings, Task } from "./types";
+import { DEFAULT_SETTINGS } from "./types";
 
 const MIN = 60_000;
 
 const SETTINGS: Settings = {
-  pomodoroWorkMin: 25,
-  pomodoroShortBreakMin: 5,
-  pomodoroLongBreakMin: 15,
-  pomodoroLongBreakEvery: 4,
-  flowtimeBreakRatio: 0.2,
-  soundEnabled: true,
-  soundPreset: "chime",
-  autoBreak: true,
+  ...DEFAULT_SETTINGS,
   showEstimates: true,
   notificationsEnabled: false,
-  maxFlowtimeMin: 0,
-  flowtimeNudgeMin: 90,
-  distractionLogEnabled: false,
-  themeId: "forest",
-  themeMode: "dark",
-  font: "rounded",
-  customThemes: [],
 };
 
 function flowSession(overrides: Partial<Session> = {}): Session {

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e9c9a0" />
+      <stop offset="0.5" stop-color="#f0ddb8" />
+      <stop offset="1" stop-color="#f7ecd2" />
+    </linearGradient>
+    <linearGradient id="dune1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e0b070" />
+      <stop offset="1" stop-color="#c98f52" />
+    </linearGradient>
+    <linearGradient id="dune2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c98f52" />
+      <stop offset="1" stop-color="#a76b3a" />
+    </linearGradient>
+    <linearGradient id="dune3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b57c44" />
+      <stop offset="1" stop-color="#8a5429" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)" />
+  <circle cx="1120" cy="300" r="130" fill="#fbe6b0" opacity="0.9" />
+  <path d="M0 560 C300 470 620 540 900 520 C1180 500 1400 560 1600 520 L1600 900 L0 900 Z" fill="url(#dune1)" />
+  <path d="M0 680 C260 600 560 680 860 640 C1180 600 1400 680 1600 640 L1600 900 L0 900 Z" fill="url(#dune2)" />
+  <path d="M0 780 C320 720 640 800 960 760 C1260 720 1440 790 1600 760 L1600 900 L0 900 Z" fill="url(#dune3)" />
+  <path d="M120 560 C420 500 700 560 960 540" fill="none" stroke="#f2d9a8" stroke-opacity="0.5" stroke-width="5" />
+</svg>

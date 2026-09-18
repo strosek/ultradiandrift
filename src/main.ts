@@ -2,7 +2,16 @@ import "./style.css";
 import "./events";
 import { startRepaint, stopRepaint } from "./repaint";
 import { unlockAudio } from "./sound";
-import { activeSession, applyTheme, breakState, quickRun, settings, setSettings, setState, state } from "./state";
+import {
+  activeSession,
+  applyTheme,
+  breakState,
+  quickRun,
+  settings,
+  setSettings,
+  setState,
+  state,
+} from "./state";
 import { openDialog, downloadTextFile } from "./dialogs";
 import {
   BACKUP_KEY,
@@ -15,6 +24,18 @@ import {
   saveDailySnapshot,
 } from "./storage";
 import { render } from "./views";
+import { customBackgroundKey } from "./backgrounds";
+import { loadBackgrounds, pruneBackgrounds } from "./backgroundStore";
+
+/** 0086: hydrate custom rest-background images, then repaint if a rest is showing. */
+function hydrateBackgrounds(): void {
+  const entries = settings.customBackgrounds;
+  const keep = new Set(entries.map((b) => customBackgroundKey(b.id)));
+  void pruneBackgrounds(keep);
+  void loadBackgrounds([...keep]).then(() => {
+    if (breakState) render();
+  });
+}
 
 // Unlock audio on first interaction (browser autoplay policy).
 document.addEventListener("pointerdown", () => unlockAudio(), { once: true });
@@ -62,6 +83,7 @@ window.addEventListener("storage", (e) => {
   } else if (e.key === SETTINGS_KEY) {
     setSettings(loadSettings());
     applyTheme();
+    hydrateBackgrounds();
   } else if (e.key === BACKUP_KEY) {
     return; // backups are transient; nothing to re-render
   } else {
@@ -73,6 +95,7 @@ window.addEventListener("storage", (e) => {
 
 applyTheme();
 saveDailySnapshot(settings, state);
+hydrateBackgrounds();
 render();
 syncTransientState();
 

@@ -1,6 +1,8 @@
 import { DEFAULT_SETTINGS, newId } from "./types";
 import type {
   AppState,
+  BackgroundImage,
+  BackgroundMode,
   Distraction,
   ExportPayload,
   RestartNote,
@@ -12,6 +14,7 @@ import type {
 } from "./types";
 import { DEFAULT_FONT_ID, isFontId } from "./fonts";
 import { DEFAULT_THEME_ID, isBuiltinTheme, sanitizeTheme, uniqueThemeId } from "./theme";
+import { NO_BACKGROUND, isCustomBackgroundId, isValidBackgroundId } from "./backgrounds";
 
 const PRESETS = ["chime", "soft", "breeze"] as const;
 const DAY_MS = 86_400_000;
@@ -145,11 +148,40 @@ function sanitizeCustomThemes(raw: unknown): Theme[] {
   return out;
 }
 
+/** 0086: at most this many imported rest backgrounds are kept. */
+const CUSTOM_BACKGROUNDS_MAX = 10;
+
+function sanitizeBackgroundMode(value: unknown): BackgroundMode {
+  return value === "dark" || value === "light" ? value : "both";
+}
+
+function sanitizeCustomBackgrounds(raw: unknown): BackgroundImage[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BackgroundImage[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (out.length >= CUSTOM_BACKGROUNDS_MAX) break;
+    if (typeof item !== "object" || item === null) continue;
+    const b = item as Record<string, unknown>;
+    const id = typeof b.id === "string" ? b.id : "";
+    if (!isCustomBackgroundId(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name: str(b.name).trim().slice(0, 60) || "Image",
+      addedAt: typeof b.addedAt === "number" && Number.isFinite(b.addedAt) ? b.addedAt : Date.now(),
+      mode: sanitizeBackgroundMode(b.mode),
+    });
+  }
+  return out;
+}
+
 /** Merge an arbitrary (possibly partial) settings value into valid settings with clamped bounds. */
 export function sanitizeSettings(raw: unknown): Settings {
   const s = (typeof raw === "object" && raw !== null ? raw : {}) as Partial<Settings>;
   const legacy = s as Record<string, unknown>;
   const customThemes = sanitizeCustomThemes(legacy.customThemes);
+  const customBackgrounds = sanitizeCustomBackgrounds(legacy.customBackgrounds);
   // 0085 migration: the old `theme: "night" | "day"` becomes Forest's dark/light mode.
   const legacyMode = legacy.theme === "day" ? "light" : "dark";
   const themeId =
@@ -158,8 +190,11 @@ export function sanitizeSettings(raw: unknown): Settings {
     (isBuiltinTheme(s.themeId) || customThemes.some((t) => t.id === s.themeId))
       ? s.themeId
       : DEFAULT_THEME_ID;
-  const themeMode =
-    s.themeMode === "light" || s.themeMode === "dark" ? s.themeMode : legacyMode;
+  const themeMode = s.themeMode === "light" || s.themeMode === "dark" ? s.themeMode : legacyMode;
+  const backgroundId = (value: unknown): string =>
+    typeof value === "string" && isValidBackgroundId(value, customBackgrounds)
+      ? value
+      : NO_BACKGROUND;
   return {
     pomodoroWorkMin: clampNum(s.pomodoroWorkMin, 1, 120, DEFAULT_SETTINGS.pomodoroWorkMin),
     pomodoroShortBreakMin: clampNum(
@@ -200,6 +235,11 @@ export function sanitizeSettings(raw: unknown): Settings {
     themeMode,
     font: isFontId(s.font) ? s.font : DEFAULT_FONT_ID,
     customThemes,
+    restBackgroundDark: backgroundId(s.restBackgroundDark),
+    restBackgroundLight: backgroundId(s.restBackgroundLight),
+    restBackgroundDim: clampNum(s.restBackgroundDim, 0, 100, DEFAULT_SETTINGS.restBackgroundDim),
+    restBackgroundBlur: clampNum(s.restBackgroundBlur, 0, 20, DEFAULT_SETTINGS.restBackgroundBlur),
+    customBackgrounds,
   };
 }
 

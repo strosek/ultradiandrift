@@ -46,6 +46,17 @@ export interface Theme {
   light: ThemeColors;
 }
 
+/** 0086: which theme mode a rest background is meant for. */
+export type BackgroundMode = "dark" | "light" | "both";
+
+/** 0086: metadata for a user-provided rest background (image bytes live in IndexedDB). */
+export interface BackgroundImage {
+  id: string;
+  name: string;
+  addedAt: number;
+  mode: BackgroundMode;
+}
+
 export type SoundPreset = "chime" | "soft" | "breeze";
 
 export type Phase = "work" | "shortBreak" | "longBreak";
@@ -172,6 +183,11 @@ export interface Settings {
   themeMode: ThemeMode; // 0085: active dark/light variant
   font: string; // 0085: active UI font pairing id
   customThemes: Theme[]; // 0085: themes imported from files
+  restBackgroundDark: string; // 0086: background id used in dark mode ("none" = off)
+  restBackgroundLight: string; // 0086: background id used in light mode ("none" = off)
+  restBackgroundDim: number; // 0086: scrim strength, 0..100
+  restBackgroundBlur: number; // 0086: image blur in px, 0..20
+  customBackgrounds: BackgroundImage[]; // 0086: imported rest backgrounds (bytes in IndexedDB)
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -192,6 +208,11 @@ export const DEFAULT_SETTINGS: Settings = {
   themeMode: "dark",
   font: "rounded",
   customThemes: [],
+  restBackgroundDark: "none",
+  restBackgroundLight: "none",
+  restBackgroundDim: 45,
+  restBackgroundBlur: 0,
+  customBackgrounds: [],
 };
 
 export interface ExportPayload {

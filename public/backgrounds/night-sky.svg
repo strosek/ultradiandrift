@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#050a1c" />
+      <stop offset="0.55" stop-color="#0d1a3a" />
+      <stop offset="1" stop-color="#1c2f4d" />
+    </linearGradient>
+    <linearGradient id="aurora" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fe0c0" stop-opacity="0" />
+      <stop offset="0.5" stop-color="#5fe0c0" stop-opacity="0.35" />
+      <stop offset="1" stop-color="#7c7cf0" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)" />
+  <g fill="#ffffff">
+    <circle cx="120" cy="110" r="2" /><circle cx="230" cy="220" r="1.6" /><circle cx="340" cy="90" r="2.4" />
+    <circle cx="470" cy="180" r="1.4" /><circle cx="600" cy="120" r="2" /><circle cx="720" cy="240" r="1.6" />
+    <circle cx="850" cy="90" r="2.2" /><circle cx="980" cy="200" r="1.5" /><circle cx="1120" cy="120" r="2" />
+    <circle cx="1260" cy="230" r="1.6" /><circle cx="1400" cy="100" r="2.3" /><circle cx="1520" cy="200" r="1.5" />
+    <circle cx="180" cy="320" r="1.4" /><circle cx="520" cy="320" r="1.8" /><circle cx="760" cy="360" r="1.4" />
+    <circle cx="1040" cy="340" r="1.7" /><circle cx="1340" cy="360" r="1.4" /><circle cx="60" cy="240" r="1.5" />
+  </g>
+  <path d="M0 520 C220 380 420 470 640 360 C860 250 1080 400 1300 300 C1440 240 1530 300 1600 270 L1600 520 Z" fill="url(#aurora)" />
+  <path d="M0 620 L180 520 L360 620 Z M300 630 L520 480 L740 630 Z M700 640 L920 500 L1140 640 Z M1080 630 L1300 490 L1520 630 Z" fill="#050b1a" />
+  <path d="M0 700 L1600 700 L1600 900 L0 900 Z" fill="#03060f" />
+  <g fill="#f6fbe8" opacity="0.7">
+    <circle cx="240" cy="120" r="3" /><circle cx="900" cy="140" r="3.4" /><circle cx="1360" cy="170" r="3" />
+  </g>
+  <path d="M780 90 C820 160 860 200 900 260 C850 220 810 180 780 90 Z" fill="#ffffff" opacity="0.35" />
+</svg>

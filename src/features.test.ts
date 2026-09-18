@@ -263,6 +263,55 @@ describe("appearance settings (0085)", () => {
   });
 });
 
+describe("rest background settings (0086)", () => {
+  const openAppearance = (): HTMLElement => {
+    document
+      .querySelector<HTMLElement>('[data-action="open-settings"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const overlay = document.querySelector<HTMLElement>(".overlay")!;
+    overlay
+      .querySelector<HTMLElement>("#tab-appearance")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return overlay;
+  };
+
+  it("offers night and day pickers and applies a built-in to each slot", async () => {
+    const state = await import("./state");
+    const overlay = openAppearance();
+    const darkPicker = overlay.querySelector<HTMLElement>("#bg-picker-dark")!;
+    expect(darkPicker.querySelectorAll(".bg-tile").length).toBeGreaterThanOrEqual(7);
+    expect(darkPicker.textContent).toContain("None");
+    expect(darkPicker.textContent).toContain("Forest stream");
+
+    darkPicker.querySelector<HTMLButtonElement>('[data-bg-id="ocean-waves"]')!.click();
+    expect(state.settings.restBackgroundDark).toBe("ocean-waves");
+
+    const lightPicker = overlay.querySelector<HTMLElement>("#bg-picker-light")!;
+    lightPicker.querySelector<HTMLButtonElement>('[data-bg-id="meadow"]')!.click();
+    expect(state.settings.restBackgroundLight).toBe("meadow");
+    overlay.remove();
+  });
+
+  it("updates the dim slider and preview live", async () => {
+    const state = await import("./state");
+    const overlay = openAppearance();
+    overlay
+      .querySelector<HTMLElement>("#bg-picker-dark")!
+      .querySelector<HTMLButtonElement>('[data-bg-id="forest-stream"]')!
+      .click();
+
+    const dim = overlay.querySelector<HTMLInputElement>("#set-bg-dim")!;
+    dim.value = "80";
+    dim.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(state.settings.restBackgroundDim).toBe(80);
+    expect(overlay.querySelector("#bg-dim-out")!.textContent).toBe("80%");
+    expect(
+      overlay.querySelector<HTMLElement>("#bg-preview")!.style.getPropertyValue("--rest-dim"),
+    ).toBe("0.8");
+    overlay.remove();
+  });
+});
+
 describe("flowtime vs pomodoro explainer (0077)", () => {
   it("opens the chooser with a 'What's the difference?' control", () => {
     addTask("Deep work");
@@ -474,6 +523,75 @@ describe("rest guide (0078)", () => {
     expect(learn.textContent).toContain("How to actually rest?");
     expect(learn.classList.contains("aux-action")).toBe(true);
     setBreakState(null);
+    render();
+  });
+});
+
+describe("rest backgrounds (0086)", () => {
+  const breakState = (): {
+    startedAt: number;
+    endsAt: number;
+    taskId: string;
+    technique: "flowtime";
+    done: boolean;
+  } => ({
+    startedAt: Date.now(),
+    endsAt: Date.now() + 5 * 60 * 1000,
+    taskId: "t1",
+    technique: "flowtime",
+    done: false,
+  });
+
+  it("renders no background layer by default", async () => {
+    const { setBreakState } = await import("./state");
+    const { render } = await import("./views");
+    setBreakState(breakState());
+    render();
+    expect(document.querySelector(".rest-bg")).toBeNull();
+    setBreakState(null);
+    render();
+  });
+
+  it("shows the night image behind the break clock with dim and blur", async () => {
+    const stateModule = await import("./state");
+    const { render } = await import("./views");
+    stateModule.setSettings({
+      ...stateModule.settings,
+      restBackgroundDark: "ocean-waves",
+      restBackgroundDim: 70,
+      restBackgroundBlur: 4,
+    });
+    stateModule.setBreakState(breakState());
+    render();
+
+    const bg = document.querySelector<HTMLElement>(".rest-bg")!;
+    expect(bg).not.toBeNull();
+    expect(bg.getAttribute("aria-hidden")).toBe("true");
+    const image = bg.querySelector<HTMLElement>(".rest-bg-image")!;
+    expect(image.style.backgroundImage).toContain("backgrounds/ocean-waves.svg");
+    expect(bg.style.getPropertyValue("--rest-dim")).toBe("0.7");
+    expect(bg.style.getPropertyValue("--rest-blur")).toBe("4px");
+
+    stateModule.setBreakState(null);
+    render();
+  });
+
+  it("uses the light image when the theme is in day mode", async () => {
+    const stateModule = await import("./state");
+    const { render } = await import("./views");
+    stateModule.setSettings({
+      ...stateModule.settings,
+      themeMode: "light",
+      restBackgroundDark: "ocean-waves",
+      restBackgroundLight: "meadow",
+    });
+    stateModule.setBreakState(breakState());
+    render();
+
+    const image = document.querySelector<HTMLElement>(".rest-bg-image")!;
+    expect(image.style.backgroundImage).toContain("backgrounds/meadow.svg");
+
+    stateModule.setBreakState(null);
     render();
   });
 });

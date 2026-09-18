@@ -59,7 +59,16 @@ import { doneSessions, sessionWorkMs, taskTotals } from "./stats";
 import { isFutureOpen, isTodayOpen } from "./tasks";
 import { MIN, formatDuration, snapshot, techniqueLabel } from "./timer";
 import type { SectionKey } from "./state";
-import type { Quadrant, Recurrence, Session, Settings, Task, Technique, ThemeToken } from "./types";
+import type {
+  BackgroundMode,
+  Quadrant,
+  Recurrence,
+  Session,
+  Settings,
+  Task,
+  Technique,
+  ThemeToken,
+} from "./types";
 import { QUADRANT_LABEL, newId } from "./types";
 import { notify, requestPermission } from "./notify";
 import { playCue } from "./sound";
@@ -67,12 +76,16 @@ import { render, positionRowMenu } from "./views";
 import { icon } from "./icons";
 import { FONTS, fontById } from "./fonts";
 import {
-  allThemes,
-  findTheme,
-  parseThemeFile,
-  themeToJson,
-  uniqueThemeId,
-} from "./theme";
+  NO_BACKGROUND,
+  backgroundSrc,
+  backgroundsForMode,
+  builtinBackground,
+  customBackgroundKey,
+  isCustomBackgroundId,
+  newCustomBackgroundId,
+} from "./backgrounds";
+import { fileToBackgroundDataUrl, removeBackground, saveBackground } from "./backgroundStore";
+import { allThemes, findTheme, parseThemeFile, themeToJson, uniqueThemeId } from "./theme";
 
 /* ------------------------------------------------------------------ */
 /* Task parsing                                                        */
@@ -1046,6 +1059,54 @@ function openSettings(): void {
         </div>
         <div class="theme-preview" id="theme-preview" aria-hidden="true"></div>
         <p class="field-hint font-preview" id="font-preview">The quick brown fox jumps over the lazy dog.</p>
+
+        <h4 class="dialog-section">Rest background</h4>
+        <p class="field-hint">A calming nature image behind the break clock. Off by default; shown only in rest mode.</p>
+        <div class="bg-preview" id="bg-preview" aria-hidden="true">
+          <div class="bg-preview-image" id="bg-preview-image"></div>
+          <div class="bg-preview-scrim" id="bg-preview-scrim"></div>
+          <span class="bg-preview-none" id="bg-preview-none">No background</span>
+        </div>
+        <p class="field-hint" id="bg-credit"></p>
+        <div class="bg-pickers">
+          <div class="field">
+            <span>Night background</span>
+            <div class="bg-picker" id="bg-picker-dark" role="group" aria-label="Night background"></div>
+          </div>
+          <div class="field">
+            <span>Day background</span>
+            <div class="bg-picker" id="bg-picker-light" role="group" aria-label="Day background"></div>
+          </div>
+        </div>
+        <div class="data-actions">
+          <button type="button" id="btn-bg-same" class="ghost">Use the same image for both</button>
+        </div>
+        <div class="settings-grid">
+          <label class="field">
+            <span>Dim <output id="bg-dim-out">${settings.restBackgroundDim}%</output></span>
+            <input type="range" id="set-bg-dim" min="0" max="100" step="5" value="${settings.restBackgroundDim}" />
+          </label>
+          <label class="field">
+            <span>Blur <output id="bg-blur-out">${settings.restBackgroundBlur}px</output></span>
+            <input type="range" id="set-bg-blur" min="0" max="20" step="1" value="${settings.restBackgroundBlur}" />
+          </label>
+        </div>
+        <div class="field">
+          <span>Your images</span>
+          <div id="bg-custom-list" class="bg-custom-list"></div>
+        </div>
+        <div class="data-actions">
+          <label class="field inline-field">
+            <span>Add as</span>
+            <select id="set-bg-import-mode">
+              <option value="both">Night &amp; day</option>
+              <option value="dark">Night</option>
+              <option value="light">Day</option>
+            </select>
+          </label>
+          <button type="button" id="btn-bg-load" class="ghost">Load image…</button>
+        </div>
+
         <h4 class="dialog-section">Theme files</h4>
         <div class="data-actions">
           <button type="button" id="btn-theme-load" class="ghost">Load theme file…</button>
@@ -1189,6 +1250,7 @@ function openSettings(): void {
     applyTheme();
     refreshThemeControls();
     refreshChrome();
+    renderBgPreview();
   }
 
   themeSelect.addEventListener("change", () => {
@@ -1226,7 +1288,10 @@ function openSettings(): void {
           showImportError(result.error);
           return;
         }
-        const theme = { ...result.theme, id: uniqueThemeId(result.theme.name, settings.customThemes) };
+        const theme = {
+          ...result.theme,
+          id: uniqueThemeId(result.theme.name, settings.customThemes),
+        };
         const customThemes = [
           ...settings.customThemes.filter((t) => t.name !== theme.name),
           theme,
@@ -1267,6 +1332,200 @@ function openSettings(): void {
     refreshThemeControls();
     refreshChrome();
   });
+
+  // 0086: rest backgrounds. Night and day slots resolve per theme mode, and like
+  // theme/font the controls apply live (no Save needed).
+  const bgPreview = overlay.querySelector<HTMLElement>("#bg-preview")!;
+  const bgPreviewImage = overlay.querySelector<HTMLElement>("#bg-preview-image")!;
+  const bgPreviewScrim = overlay.querySelector<HTMLElement>("#bg-preview-scrim")!;
+  const bgPreviewNone = overlay.querySelector<HTMLElement>("#bg-preview-none")!;
+  const bgCredit = overlay.querySelector<HTMLElement>("#bg-credit")!;
+  const bgPickerDark = overlay.querySelector<HTMLElement>("#bg-picker-dark")!;
+  const bgPickerLight = overlay.querySelector<HTMLElement>("#bg-picker-light")!;
+  const bgCustomList = overlay.querySelector<HTMLElement>("#bg-custom-list")!;
+  const bgLoadBtn = overlay.querySelector<HTMLButtonElement>("#btn-bg-load")!;
+  const bgImportMode = overlay.querySelector<HTMLSelectElement>("#set-bg-import-mode")!;
+  const bgDimInput = overlay.querySelector<HTMLInputElement>("#set-bg-dim")!;
+  const bgBlurInput = overlay.querySelector<HTMLInputElement>("#set-bg-blur")!;
+  const bgDimOut = overlay.querySelector<HTMLOutputElement>("#bg-dim-out")!;
+  const bgBlurOut = overlay.querySelector<HTMLOutputElement>("#bg-blur-out")!;
+  const bgSameBtn = overlay.querySelector<HTMLButtonElement>("#btn-bg-same")!;
+
+  const slotField = (slot: "dark" | "light"): "restBackgroundDark" | "restBackgroundLight" =>
+    slot === "dark" ? "restBackgroundDark" : "restBackgroundLight";
+
+  function slotValue(slot: "dark" | "light"): string {
+    return slot === "dark" ? settings.restBackgroundDark : settings.restBackgroundLight;
+  }
+
+  function modeBadge(mode: BackgroundMode): string {
+    if (mode === "dark") return `<span class="bg-tile-badge">Night</span>`;
+    if (mode === "light") return `<span class="bg-tile-badge">Day</span>`;
+    return "";
+  }
+
+  function bgTile(
+    slot: "dark" | "light",
+    option: { id: string; label: string; src: string | null; mode: BackgroundMode },
+  ): string {
+    const selected = slotValue(slot) === option.id;
+    const isNone = option.id === NO_BACKGROUND;
+    const style = option.src ? ` style="background-image:url('${escapeHtml(option.src)}')"` : "";
+    const label = isNone
+      ? "None"
+      : `<span class="bg-tile-label">${escapeHtml(option.label)}</span>`;
+    const badge = isCustomBackgroundId(option.id) ? modeBadge(option.mode) : "";
+    return `<button type="button" class="bg-tile${selected ? " selected" : ""}${isNone ? " none" : ""}" data-bg-slot="${slot}" data-bg-id="${escapeHtml(option.id)}" aria-pressed="${selected}" title="${escapeHtml(option.label)}"${style}>${label}${badge}</button>`;
+  }
+
+  function renderBgPickers(): void {
+    const none = { id: NO_BACKGROUND, label: "None", src: null, mode: "both" as BackgroundMode };
+    for (const slot of ["dark", "light"] as const) {
+      const picker = slot === "dark" ? bgPickerDark : bgPickerLight;
+      const options = [none, ...backgroundsForMode(slot, settings.customBackgrounds)];
+      picker.innerHTML = options.map((o) => bgTile(slot, o)).join("");
+    }
+    renderBgCustomList();
+    renderBgPreview();
+  }
+
+  function renderBgCustomList(): void {
+    if (settings.customBackgrounds.length === 0) {
+      bgCustomList.innerHTML = `<p class="field-hint">No images loaded yet.</p>`;
+      return;
+    }
+    bgCustomList.innerHTML = settings.customBackgrounds
+      .map(
+        (b) => `<div class="bg-custom-row">
+          <span class="bg-custom-name">${escapeHtml(b.name)}</span>
+          <select data-bg-mode="${escapeHtml(b.id)}" aria-label="Use ${escapeHtml(b.name)} for">
+            <option value="both"${b.mode === "both" ? " selected" : ""}>Night &amp; day</option>
+            <option value="dark"${b.mode === "dark" ? " selected" : ""}>Night</option>
+            <option value="light"${b.mode === "light" ? " selected" : ""}>Day</option>
+          </select>
+          <button type="button" class="ghost" data-bg-remove="${escapeHtml(b.id)}" aria-label="Remove ${escapeHtml(b.name)}">Remove</button>
+        </div>`,
+      )
+      .join("");
+  }
+
+  function renderBgPreview(): void {
+    const id = slotValue(settings.themeMode);
+    const src = backgroundSrc(id);
+    const dim = Math.max(0, Math.min(1, settings.restBackgroundDim / 100));
+    const blur = Math.max(0, Math.min(20, settings.restBackgroundBlur));
+    bgPreview.style.setProperty("--rest-dim", String(dim));
+    bgPreview.style.setProperty("--rest-blur", `${blur}px`);
+    bgPreviewImage.style.backgroundImage = src ? `url("${src}")` : "";
+    bgPreviewImage.hidden = !src;
+    bgPreviewScrim.hidden = !src;
+    bgPreviewNone.hidden = !!src;
+    bgCredit.textContent = builtinBackground(id)?.credit ?? "";
+    bgDimOut.textContent = `${settings.restBackgroundDim}%`;
+    bgBlurOut.textContent = `${settings.restBackgroundBlur}px`;
+  }
+
+  function persistBackgrounds(): void {
+    saveSettings(settings);
+    renderBgPickers();
+  }
+
+  for (const picker of [bgPickerDark, bgPickerLight]) {
+    picker.addEventListener("click", (e) => {
+      const tile = (e.target as HTMLElement).closest<HTMLElement>("[data-bg-id]");
+      if (!tile) return;
+      const slot = tile.dataset.bgSlot === "light" ? "light" : "dark";
+      setSettings({ ...settings, [slotField(slot)]: tile.dataset.bgId! });
+      persistBackgrounds();
+    });
+  }
+
+  bgSameBtn.addEventListener("click", () => {
+    const active = slotValue(settings.themeMode);
+    setSettings({ ...settings, restBackgroundDark: active, restBackgroundLight: active });
+    persistBackgrounds();
+  });
+
+  bgDimInput.addEventListener("input", () => {
+    setSettings({ ...settings, restBackgroundDim: Number(bgDimInput.value) });
+    renderBgPreview();
+  });
+  bgDimInput.addEventListener("change", () => saveSettings(settings));
+
+  bgBlurInput.addEventListener("input", () => {
+    setSettings({ ...settings, restBackgroundBlur: Number(bgBlurInput.value) });
+    renderBgPreview();
+  });
+  bgBlurInput.addEventListener("change", () => saveSettings(settings));
+
+  bgCustomList.addEventListener("change", (e) => {
+    const select = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-bg-mode]");
+    if (!select) return;
+    const id = select.dataset.bgMode!;
+    const mode: BackgroundMode =
+      select.value === "dark" || select.value === "light" ? select.value : "both";
+    setSettings({
+      ...settings,
+      customBackgrounds: settings.customBackgrounds.map((b) => (b.id === id ? { ...b, mode } : b)),
+    });
+    persistBackgrounds();
+  });
+
+  bgCustomList.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-bg-remove]");
+    if (!btn) return;
+    const id = btn.dataset.bgRemove!;
+    void removeBackground(customBackgroundKey(id));
+    setSettings({
+      ...settings,
+      customBackgrounds: settings.customBackgrounds.filter((b) => b.id !== id),
+      restBackgroundDark:
+        settings.restBackgroundDark === id ? NO_BACKGROUND : settings.restBackgroundDark,
+      restBackgroundLight:
+        settings.restBackgroundLight === id ? NO_BACKGROUND : settings.restBackgroundLight,
+    });
+    persistBackgrounds();
+  });
+
+  bgLoadBtn.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const chosen = bgImportMode.value;
+      const mode: BackgroundMode = chosen === "dark" || chosen === "light" ? chosen : "both";
+      void (async () => {
+        try {
+          const dataUrl = await fileToBackgroundDataUrl(file);
+          const id = newCustomBackgroundId();
+          await saveBackground(customBackgroundKey(id), dataUrl);
+          const name =
+            file.name
+              .replace(/\.[^.]+$/, "")
+              .trim()
+              .slice(0, 60) || "Image";
+          const customBackgrounds = [
+            ...settings.customBackgrounds,
+            { id, name, addedAt: Date.now(), mode },
+          ].slice(0, 10);
+          const slot = mode === "both" ? settings.themeMode : mode;
+          setSettings({
+            ...settings,
+            customBackgrounds,
+            [slotField(slot)]: id,
+          });
+          persistBackgrounds();
+        } catch (err) {
+          showImportError(err instanceof Error ? err.message : "That image couldn't be loaded.");
+        }
+      })();
+    });
+    input.click();
+  });
+
+  renderBgPickers();
 
   refreshThemeControls();
 

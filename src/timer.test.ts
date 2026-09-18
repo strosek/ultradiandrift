@@ -10,6 +10,7 @@ import {
 } from "./timer";
 import type { TimerConfig } from "./timer";
 import type { Session, Settings } from "./types";
+import { DEFAULT_SETTINGS } from "./types";
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -140,23 +141,9 @@ describe("flowtime snapshot", () => {
 describe("configFromSettings", () => {
   it("derives ms values from minute settings", () => {
     const settings: Settings = {
-      pomodoroWorkMin: 25,
-      pomodoroShortBreakMin: 5,
-      pomodoroLongBreakMin: 15,
-      pomodoroLongBreakEvery: 4,
-      flowtimeBreakRatio: 0.2,
-      soundEnabled: true,
-      soundPreset: "chime",
-      autoBreak: true,
+      ...DEFAULT_SETTINGS,
       showEstimates: true,
       notificationsEnabled: false,
-      maxFlowtimeMin: 0,
-      flowtimeNudgeMin: 90,
-      distractionLogEnabled: false,
-      themeId: "forest",
-      themeMode: "dark",
-      font: "rounded",
-      customThemes: [],
     };
     expect(configFromSettings(settings)).toEqual(BASE_CONFIG);
   });
