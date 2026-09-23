@@ -72,7 +72,7 @@ import type {
 import { QUADRANT_LABEL, newId } from "./types";
 import { notify, requestPermission } from "./notify";
 import { playCue } from "./sound";
-import { render, positionRowMenu } from "./views";
+import { render, positionRowMenu, flashPhaseChange } from "./views";
 import { icon } from "./icons";
 import { FONTS, fontById } from "./fonts";
 import {
@@ -2235,6 +2235,28 @@ export function resumeSession(session: Session): void {
   render();
 }
 
+/**
+ * 0087: freeze a pomodoro exactly at a break→work boundary so the next focus
+ * block never auto-starts. `boundaryElapsedMs` is the active elapsed time at the
+ * start of the upcoming work phase; the pause is anchored there so none of the
+ * overshoot past the boundary leaks into the next focus block.
+ */
+export function pauseAfterPomodoroBreak(
+  session: Session,
+  boundaryElapsedMs: number,
+  now: number = Date.now(),
+): void {
+  if (session.status !== "running") return;
+  const safeBoundary = Math.max(0, boundaryElapsedMs);
+  session.pausedAt = now;
+  session.status = "paused";
+  session.accumulatedPauseMs = Math.max(0, now - session.startedAt - safeBoundary);
+  setHiddenAt(null);
+  setHiddenSessionId(null);
+  persist();
+  render();
+}
+
 /** Abort a running/paused session without recording it as finished work. */
 export function cancelSession(session: Session): void {
   const id = session.id;
@@ -2262,6 +2284,21 @@ export function beginFocusFromBreak(): void {
   const { taskId, technique } = breakState;
   setBreakState(null);
   startSession(taskId, technique);
+}
+
+/** 0087: begin a suggested break whose countdown was waiting on the rest screen. */
+export function startBreak(): void {
+  if (!breakState || breakState.done || breakState.running) return;
+  const now = Date.now();
+  setBreakState({
+    ...breakState,
+    running: true,
+    startedAt: now,
+    endsAt: now + breakState.durationMs,
+  });
+  startRepaint();
+  render();
+  flashPhaseChange();
 }
 
 function skipBreak(): void {
@@ -2449,15 +2486,20 @@ export function finishSession(session: Session): void {
   }
 
   setLastFinished(record);
-  if (settings.autoBreak && breakMs > 0) {
+  // 0087: always open the rest screen after a work session, but only start the
+  // countdown automatically when auto-break is enabled. Otherwise the suggested
+  // break waits on the rest screen for an explicit "Start break".
+  if (breakMs > 0) {
     setBreakState({
       startedAt: now,
       endsAt: now + breakMs,
+      durationMs: breakMs,
+      running: settings.autoBreak,
       taskId: session.taskId,
       technique: session.technique,
       done: false,
     });
-    startRepaint();
+    if (settings.autoBreak) startRepaint();
   }
   render();
 
@@ -2815,6 +2857,9 @@ export function handleAction(
       break;
     case "start-next":
       beginFocusFromBreak();
+      break;
+    case "start-break":
+      startBreak();
       break;
     case "rest-guide":
       openRestGuide();

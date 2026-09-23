@@ -96,10 +96,20 @@ export interface Task {
   completions: TaskCompletion[]; // 0063: history of completed occurrences (recurring only)
 }
 
-/** 0014: break countdown started automatically after finishing a session. */
+/** 0014: break countdown offered after finishing a session. */
 export interface BreakState {
-  startedAt: number; // 0064: when the break began (drives the progress ring)
+  startedAt: number; // 0064: when the break countdown began (drives the progress ring)
   endsAt: number;
+  /**
+   * 0087: the suggested break length. Kept so a not-yet-started break can show
+   * the full duration and start its countdown on demand.
+   */
+  durationMs: number;
+  /**
+   * 0087: whether the countdown is actually running. When auto-break is off the
+   * rest screen still opens, but the timer waits for an explicit "Start break".
+   */
+  running: boolean;
   taskId: string;
   technique: Technique;
   done: boolean;

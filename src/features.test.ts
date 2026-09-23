@@ -456,6 +456,8 @@ describe("rest guide (0078)", () => {
     setBreakState({
       startedAt: Date.now(),
       endsAt: Date.now() + 5 * 60 * 1000,
+      durationMs: 5 * 60 * 1000,
+      running: true,
       taskId: "t1",
       technique: "flowtime",
       done: false,
@@ -481,6 +483,8 @@ describe("rest guide (0078)", () => {
     setBreakState({
       startedAt: Date.now(),
       endsAt: Date.now() + 5 * 60 * 1000,
+      durationMs: 5 * 60 * 1000,
+      running: true,
       taskId: "t1",
       technique: "pomodoro",
       done: false,
@@ -505,6 +509,8 @@ describe("rest guide (0078)", () => {
     setBreakState({
       startedAt: Date.now(),
       endsAt: Date.now() + 5 * 60 * 1000,
+      durationMs: 5 * 60 * 1000,
+      running: true,
       taskId: "t1",
       technique: "flowtime",
       done: false,
@@ -527,16 +533,373 @@ describe("rest guide (0078)", () => {
   });
 });
 
+describe("rest screen after a session (0087)", () => {
+  const startFlowtime = async (): Promise<string> => {
+    const { state } = await import("./state");
+    addTask("Write report");
+    const taskId = state.tasks[0].id;
+    document
+      .querySelector<HTMLElement>(".task-start [data-action='start']")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document
+      .querySelector<HTMLElement>('[data-tech="flowtime"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return taskId;
+  };
+
+  const finishWithBreak = async (autoBreak: boolean): Promise<void> => {
+    const { state, setSettings } = await import("./state");
+    const { DEFAULT_SETTINGS } = await import("./types");
+    setSettings({
+      ...DEFAULT_SETTINGS,
+      autoBreak,
+      soundEnabled: false,
+      notificationsEnabled: false,
+    });
+    await startFlowtime();
+    // Backdate the session so flowtime's suggested break is a positive length.
+    const session = state.sessions.find((s) => s.id === state.activeSessionId)!;
+    session.startedAt -= 10 * 60 * 1000;
+    document
+      .querySelector<HTMLElement>('[data-action="finish"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  };
+
+  it("opens the rest screen but waits for a start when auto-break is off", async () => {
+    const stateModule = await import("./state");
+    await finishWithBreak(false);
+
+    expect(stateModule.breakState).not.toBeNull();
+    expect(stateModule.breakState!.running).toBe(false);
+    expect(stateModule.breakState!.durationMs).toBeGreaterThan(0);
+    expect(document.querySelector("#app")!.textContent).toContain("Rest");
+    expect(document.querySelector<HTMLElement>('[data-action="start-break"]')).not.toBeNull();
+    // The countdown has not begun, so focus controls are not offered on this screen.
+    expect(document.querySelector<HTMLElement>('[data-action="start-next"]')).toBeNull();
+  });
+
+  it("starts the suggested break countdown on demand", async () => {
+    const stateModule = await import("./state");
+    await finishWithBreak(false);
+
+    document
+      .querySelector<HTMLElement>('[data-action="start-break"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    const brk = stateModule.breakState!;
+    expect(brk.running).toBe(true);
+    expect(brk.endsAt - brk.startedAt).toBe(brk.durationMs);
+    expect(document.querySelector<HTMLElement>('[data-action="start-break"]')).toBeNull();
+  });
+
+  it("auto-starts the break countdown when auto-break is on", async () => {
+    const stateModule = await import("./state");
+    await finishWithBreak(true);
+    expect(stateModule.breakState!.running).toBe(true);
+    expect(document.querySelector<HTMLElement>('[data-action="start-break"]')).toBeNull();
+  });
+
+  it("never auto-starts a focus session when the break ends", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    stateModule.setBreakState({
+      startedAt: Date.now() - 60_000,
+      endsAt: Date.now() - 1,
+      durationMs: 60_000,
+      running: true,
+      taskId: "t1",
+      technique: "flowtime",
+      done: false,
+    });
+    catchUpHidden();
+
+    expect(stateModule.breakState!.done).toBe(true);
+    expect(stateModule.state.activeSessionId).toBeNull();
+    expect(document.querySelector("#app")!.textContent).toContain("Break over");
+    // Focus only resumes from the explicit "Continue focusing" button.
+    expect(document.querySelector<HTMLElement>('[data-action="start-next"]')).not.toBeNull();
+  });
+});
+
+describe("pomodoro breaks wait for resume (0087)", () => {
+  const WORK_MS = 60_000;
+  const SHORT_MS = 60_000;
+
+  const startPomodoro = async (): Promise<string> => {
+    const { state } = await import("./state");
+    addTask("Deep work");
+    const taskId = state.tasks[0].id;
+    document
+      .querySelector<HTMLElement>(".task-start [data-action='start']")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document
+      .querySelector<HTMLElement>('[data-tech="pomodoro"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return taskId;
+  };
+
+  const useShortPomodoroSettings = async (): Promise<void> => {
+    const { setSettings } = await import("./state");
+    const { DEFAULT_SETTINGS } = await import("./types");
+    setSettings({
+      ...DEFAULT_SETTINGS,
+      pomodoroWorkMin: 1,
+      pomodoroShortBreakMin: 1,
+      pomodoroLongBreakMin: 2,
+      pomodoroLongBreakEvery: 4,
+      soundEnabled: false,
+      notificationsEnabled: false,
+    });
+  };
+
+  it("keeps running when a work block rolls into its break", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    await useShortPomodoroSettings();
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    // 1s into the short break.
+    session.startedAt = Date.now() - (WORK_MS + 1_000);
+    stateModule.setLastWatch({ sessionId: session.id, phase: "work", running: true });
+
+    catchUpHidden();
+
+    expect(session.status).toBe("running");
+    expect(document.querySelector(".session-phase")!.textContent).toContain("Short break");
+    expect(document.querySelector<HTMLElement>('[data-action="pause"]')).not.toBeNull();
+  });
+
+  it("pauses instead of auto-starting focus when a short break ends", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    const { activeElapsedMs } = await import("./timer");
+    await useShortPomodoroSettings();
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    // 1s into the second work block (past the work+break boundary).
+    session.startedAt = Date.now() - (WORK_MS + SHORT_MS + 1_000);
+    stateModule.setLastWatch({ sessionId: session.id, phase: "shortBreak", running: true });
+
+    catchUpHidden();
+
+    expect(session.status).toBe("paused");
+    expect(session.pausedAt).not.toBeNull();
+    // Frozen exactly at the boundary — none of the overshoot leaks into focus.
+    expect(activeElapsedMs(session, Date.now())).toBe(WORK_MS + SHORT_MS);
+    expect(stateModule.lastWatch).toEqual({
+      sessionId: session.id,
+      phase: "work",
+      running: false,
+    });
+    // The next focus block is staged at full length, waiting for Resume.
+    expect(document.querySelector(".session-phase")!.textContent).toContain("Focus");
+    expect(document.querySelector(".clock")!.textContent).toBe("01:00");
+    expect(document.querySelector<HTMLElement>('[data-action="resume"]')).not.toBeNull();
+  });
+
+  it("also pauses when a long break ends", async () => {
+    const stateModule = await import("./state");
+    const { setSettings } = await import("./state");
+    const { DEFAULT_SETTINGS } = await import("./types");
+    const { catchUpHidden } = await import("./repaint");
+    const { activeElapsedMs } = await import("./timer");
+    setSettings({
+      ...DEFAULT_SETTINGS,
+      pomodoroWorkMin: 1,
+      pomodoroShortBreakMin: 1,
+      pomodoroLongBreakMin: 2,
+      pomodoroLongBreakEvery: 2,
+      soundEnabled: false,
+      notificationsEnabled: false,
+    });
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    const LONG_MS = 2 * 60_000;
+    // work + short + work + long, then 1s into the next cycle's work.
+    session.startedAt = Date.now() - (WORK_MS + SHORT_MS + WORK_MS + LONG_MS + 1_000);
+    stateModule.setLastWatch({ sessionId: session.id, phase: "longBreak", running: true });
+
+    catchUpHidden();
+
+    expect(session.status).toBe("paused");
+    expect(activeElapsedMs(session, Date.now())).toBe(WORK_MS + SHORT_MS + WORK_MS + LONG_MS);
+    expect(document.querySelector<HTMLElement>('[data-action="resume"]')).not.toBeNull();
+  });
+
+  it("resumes the staged focus block from the Resume control", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    await useShortPomodoroSettings();
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    session.startedAt = Date.now() - (WORK_MS + SHORT_MS + 1_000);
+    stateModule.setLastWatch({ sessionId: session.id, phase: "shortBreak", running: true });
+    catchUpHidden();
+    expect(session.status).toBe("paused");
+
+    document
+      .querySelector<HTMLElement>('[data-action="resume"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(session.status).toBe("running");
+    expect(session.pausedAt).toBeNull();
+    expect(document.querySelector<HTMLElement>('[data-action="pause"]')).not.toBeNull();
+  });
+});
+
+describe("phase transition visuals (0088)", () => {
+  const WORK_MS = 60_000;
+  const SHORT_MS = 60_000;
+
+  const startPomodoro = async (): Promise<string> => {
+    const { state } = await import("./state");
+    addTask("Deep work");
+    const taskId = state.tasks[0].id;
+    document
+      .querySelector<HTMLElement>(".task-start [data-action='start']")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    document
+      .querySelector<HTMLElement>('[data-tech="pomodoro"]')!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return taskId;
+  };
+
+  const useShortPomodoroSettings = async (): Promise<void> => {
+    const { setSettings } = await import("./state");
+    const { DEFAULT_SETTINGS } = await import("./types");
+    setSettings({
+      ...DEFAULT_SETTINGS,
+      pomodoroWorkMin: 1,
+      pomodoroShortBreakMin: 1,
+      pomodoroLongBreakMin: 2,
+      pomodoroLongBreakEvery: 4,
+      soundEnabled: false,
+      notificationsEnabled: false,
+    });
+  };
+
+  it("tints the clock frame by phase", async () => {
+    const stateModule = await import("./state");
+    await useShortPomodoroSettings();
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    // Work phase.
+    session.startedAt = Date.now() - 1_000;
+    stateModule.setLastWatch({ sessionId: session.id, phase: "work", running: true });
+    const { render } = await import("./views");
+    render();
+    expect(document.querySelector(".clock-frame.phase-work")).not.toBeNull();
+
+    // 1s into the short break.
+    session.startedAt = Date.now() - (WORK_MS + 1_000);
+    render();
+    expect(document.querySelector(".clock-frame.phase-break")).not.toBeNull();
+  });
+
+  it("marks the staged next-focus block and eases in Resume", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    await useShortPomodoroSettings();
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    session.startedAt = Date.now() - (WORK_MS + SHORT_MS + 1_000);
+    stateModule.setLastWatch({ sessionId: session.id, phase: "shortBreak", running: true });
+    catchUpHidden();
+
+    expect(document.querySelector(".session-main.staged")).not.toBeNull();
+    expect(document.querySelector<HTMLElement>('[data-action="resume"]')).not.toBeNull();
+  });
+
+  it("flashes the crossfade when work rolls into a break", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    await useShortPomodoroSettings();
+    await startPomodoro();
+    const session = stateModule.state.sessions.find(
+      (s) => s.id === stateModule.state.activeSessionId,
+    )!;
+    session.startedAt = Date.now() - (WORK_MS + 1_000);
+    stateModule.setLastWatch({ sessionId: session.id, phase: "work", running: true });
+    catchUpHidden();
+
+    expect(document.querySelector(".clock-frame.phase-break")).not.toBeNull();
+    expect(document.querySelector(".session-main.phase-change")).not.toBeNull();
+  });
+
+  it("flashes the rest break-over screen", async () => {
+    const stateModule = await import("./state");
+    const { catchUpHidden } = await import("./repaint");
+    stateModule.setBreakState({
+      startedAt: Date.now() - 60_000,
+      endsAt: Date.now() - 1,
+      durationMs: 60_000,
+      running: true,
+      taskId: "t1",
+      technique: "flowtime",
+      done: false,
+    });
+    catchUpHidden();
+
+    expect(document.querySelector(".session-main.rest-done")).not.toBeNull();
+    expect(document.querySelector(".session-main.phase-change")).not.toBeNull();
+  });
+
+  it("marks waiting and running rest screens", async () => {
+    const stateModule = await import("./state");
+    const { render } = await import("./views");
+    stateModule.setBreakState({
+      startedAt: Date.now(),
+      endsAt: Date.now() + 60_000,
+      durationMs: 60_000,
+      running: false,
+      taskId: "t1",
+      technique: "flowtime",
+      done: false,
+    });
+    render();
+    expect(document.querySelector(".session-main.rest-waiting")).not.toBeNull();
+
+    stateModule.setBreakState({
+      startedAt: Date.now(),
+      endsAt: Date.now() + 60_000,
+      durationMs: 60_000,
+      running: true,
+      taskId: "t1",
+      technique: "flowtime",
+      done: false,
+    });
+    render();
+    expect(document.querySelector(".session-main.rest-running")).not.toBeNull();
+    expect(document.querySelector(".clock-frame.phase-break")).not.toBeNull();
+  });
+});
+
 describe("rest backgrounds (0086)", () => {
   const breakState = (): {
     startedAt: number;
     endsAt: number;
+    durationMs: number;
+    running: boolean;
     taskId: string;
     technique: "flowtime";
     done: boolean;
   } => ({
     startedAt: Date.now(),
     endsAt: Date.now() + 5 * 60 * 1000,
+    durationMs: 5 * 60 * 1000,
+    running: true,
     taskId: "t1",
     technique: "flowtime",
     done: false,

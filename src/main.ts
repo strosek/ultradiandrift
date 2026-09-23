@@ -63,10 +63,12 @@ onStorageQuotaExceeded(() => {
 
 function syncTransientState(): void {
   const active = activeSession();
+  // 0087: only a running break needs the repaint tick; a waiting rest screen is static.
+  const breakRunning = breakState !== null && breakState.running && !breakState.done;
   if (
     active?.status === "running" ||
     active?.status === "paused" ||
-    breakState !== null ||
+    breakRunning ||
     quickRun !== null
   ) {
     startRepaint();

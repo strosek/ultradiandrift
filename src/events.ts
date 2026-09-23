@@ -13,6 +13,7 @@ import {
   resumeSession,
   setEstimate,
   showIdleToast,
+  startBreak,
 } from "./actions";
 import { catchUpHidden } from "./repaint";
 import {
@@ -102,7 +103,10 @@ function handleShortcut(e: KeyboardEvent): void {
     return;
   }
   if (lower === "f") {
-    if (breakState) {
+    if (breakState && !breakState.done && !breakState.running) {
+      // 0087: a waiting rest screen starts its break rather than skipping to focus.
+      startBreak();
+    } else if (breakState) {
       beginFocusFromBreak();
     } else if (quickRun) {
       finishQuick();

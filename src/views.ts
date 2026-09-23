@@ -119,6 +119,24 @@ export function updateClockRing(fraction: number): void {
   ring.style.strokeDashoffset = String(RING_C * (1 - frac));
 }
 
+/**
+ * 0088: one-shot gentle highlight for a work/break transition. Adds
+ * `phase-change` to the current session view so the clock and phase label
+ * crossfade instead of cutting; removed on animation end (with a timeout
+ * fallback for environments without CSS animations).
+ */
+export function flashPhaseChange(): void {
+  const main = document.querySelector<HTMLElement>(".session-main");
+  if (!main) return;
+  main.classList.remove("phase-change");
+  // Force reflow so re-adding restarts the animation.
+  void main.offsetWidth;
+  main.classList.add("phase-change");
+  const done = (): void => main.classList.remove("phase-change");
+  main.addEventListener("animationend", done, { once: true });
+  window.setTimeout(done, 600);
+}
+
 /** 0064: clock wrapped in an optional progress ring and/or breathing pulse. */
 function clockFrameHtml(
   text: string,
@@ -880,7 +898,11 @@ function renderHistory(taskId: string | null): void {
     ${
       distractionsSorted.length
         ? `<ul class="hist-list">${distractionsRows}</ul>`
-        : emptyStateHtml("target", "Nothing here yet", "Capture distractions during sessions to see them here.")
+        : emptyStateHtml(
+            "target",
+            "Nothing here yet",
+            "Capture distractions during sessions to see them here.",
+          )
     }`;
 
   const sessionsTabHtml = `
@@ -1111,7 +1133,11 @@ function renderDashboard(): void {
                 ${
                   state.distractions.length
                     ? `<ul class="dash-stats"><li><span>Logged</span><strong>${state.distractions.length}</strong></li></ul>`
-                    : emptyStateHtml("target", "No distractions yet", "Enable the distraction log in Settings, then capture thoughts during sessions.")
+                    : emptyStateHtml(
+                        "target",
+                        "No distractions yet",
+                        "Enable the distraction log in Settings, then capture thoughts during sessions.",
+                      )
                 }
               </section>`
             : ""
@@ -1190,10 +1216,23 @@ function renderSession(session: Session): void {
     snap.elapsedMs >= settings.flowtimeNudgeMin * 60_000;
 
   // 0064: pomodoro gets a draining progress ring; flowtime gets a slow heartbeat glow.
+  // 0088: phase classes drive the subtle work/break ring tint (see style.css).
   const config = timerConfig();
   let ringFrac: number | null = null;
   let pulse = false;
   let pulseStrong = false;
+  const isPomodoro = session.technique === "pomodoro";
+  const phaseClass = !isPomodoro || snap.phase === "work" ? "phase-work" : "phase-break";
+  let staged = false;
+  if (
+    isPomodoro &&
+    session.status === "paused" &&
+    snap.phase === "work" &&
+    snap.remainingMs != null
+  ) {
+    const total = phaseMs(snap.phase, config);
+    staged = snap.elapsedMs > 0 && snap.completedPomodoros > 0 && snap.remainingMs === total;
+  }
   if (session.technique === "pomodoro") {
     const total = phaseMs(snap.phase, config);
     ringFrac = snap.remainingMs != null && total > 0 ? snap.remainingMs / total : null;
@@ -1205,7 +1244,7 @@ function renderSession(session: Session): void {
     ringFrac,
     pulse,
     strong: pulseStrong,
-    frameClass: nudgePast ? "nudge-past" : "",
+    frameClass: [phaseClass, nudgePast ? "nudge-past" : ""].filter(Boolean).join(" "),
   });
 
   if (focusMode) {
@@ -1217,7 +1256,7 @@ function renderSession(session: Session): void {
     renderView(
       "session",
       `
-      <main class="session-main focus">
+      <main class="session-main focus${staged ? " staged" : ""}">
         <header class="session-header">
           <h2 class="session-task-title">${title}</h2>
         </header>
@@ -1265,7 +1304,7 @@ function renderSession(session: Session): void {
   renderView(
     "session",
     `
-    <main class="session-main">
+    <main class="session-main${staged ? " staged" : ""}">
       <header class="session-header">
         <h2 class="session-task-title">${title}</h2>
         <span class="session-phase">${phaseLabel(snap.phase)} · ${techniqueLabel(session.technique)}</span>
@@ -1320,7 +1359,7 @@ function renderBreak(): void {
       "break",
       `
       ${background}
-      <main class="session-main">
+      <main class="session-main rest-done">
         <header class="session-header">
           <h2 class="session-task-title">Break over</h2>
           <span class="session-phase">Ready to focus again</span>
@@ -1335,6 +1374,31 @@ function renderBreak(): void {
     return;
   }
 
+  // 0087: the rest screen opens with the suggested break even when auto-break is
+  // off; the countdown waits for an explicit start.
+  if (!breakState.running) {
+    updateDocumentTitle(formatMs(breakState.durationMs));
+    renderView(
+      "break",
+      `
+      ${background}
+      <main class="session-main rest-waiting">
+        <header class="session-header">
+          <h2 class="session-task-title">Rest</h2>
+          <span class="session-phase">Suggested · ${techniqueLabel(breakState.technique)}</span>
+        </header>
+        ${clockFrameHtml(formatMs(breakState.durationMs), { ringFrac: 1, frameClass: "phase-break" })}
+        <div class="session-controls">
+          <button class="primary" data-action="start-break">${icon("play")} Start break</button>
+          <button class="ghost" data-action="skip-break">${icon("stop")} Skip</button>
+        </div>
+        <button class="aux-action" data-action="rest-guide">${icon("info")} How to actually rest?</button>
+      </main>
+      <p class="shortcut-hint"><span class="hint-text"><strong>F</strong> start break</span>${koFiHtml()}</p>`,
+    );
+    return;
+  }
+
   const remaining = Math.max(0, breakState.endsAt - Date.now());
   const total = breakState.endsAt - breakState.startedAt;
   updateDocumentTitle(formatMs(remaining));
@@ -1342,12 +1406,12 @@ function renderBreak(): void {
     "break",
     `
     ${background}
-    <main class="session-main">
+    <main class="session-main rest-running">
       <header class="session-header">
         <h2 class="session-task-title">Break</h2>
         <span class="session-phase">Rest · ${techniqueLabel(breakState.technique)}</span>
       </header>
-      ${clockFrameHtml(formatMs(remaining), { ringFrac: total > 0 ? remaining / total : 0 })}
+      ${clockFrameHtml(formatMs(remaining), { ringFrac: total > 0 ? remaining / total : 0, frameClass: "phase-break" })}
       <div class="session-controls">
         <button class="primary" data-action="start-next">${icon("play")} Continue focusing</button>
         <button class="ghost" data-action="skip-break">${icon("stop")} Done</button>

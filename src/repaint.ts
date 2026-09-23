@@ -1,4 +1,4 @@
-import { finishSession, showFlowtimeNudge } from "./actions";
+import { finishSession, pauseAfterPomodoroBreak, showFlowtimeNudge } from "./actions";
 import { announce } from "./announce";
 import { notify } from "./notify";
 import { playCue } from "./sound";
@@ -22,7 +22,8 @@ import {
   snapshot,
   techniqueLabel,
 } from "./timer";
-import { render, updateClockRing, updateDocumentTitle } from "./views";
+import type { TimerConfig, TimerSnapshot } from "./timer";
+import { render, updateClockRing, updateDocumentTitle, flashPhaseChange } from "./views";
 import type { Session } from "./types";
 
 let repaintHandle: number | undefined;
@@ -33,7 +34,7 @@ let nudgeFloor: number | null = null;
 let nudgeSessionId: string | null = null;
 
 function breakOver(): void {
-  setBreakState({ ...breakState!, done: true });
+  setBreakState({ ...breakState!, running: false, done: true });
   if (settings.soundEnabled) playCue("workStart", settings.soundPreset);
   if (settings.notificationsEnabled) {
     const task = taskById(breakState!.taskId);
@@ -41,6 +42,7 @@ function breakOver(): void {
   }
   announce("Break over. Time to focus.");
   render();
+  flashPhaseChange();
 }
 
 function handlePhaseBoundary(session: Session, nowBreak: boolean): void {
@@ -56,10 +58,37 @@ function handlePhaseBoundary(session: Session, nowBreak: boolean): void {
   announce(nowBreak ? "Pomodoro complete. Time for a break." : "Break over. Time to focus.");
 }
 
+/**
+ * 0087: a pomodoro break ended — cue it, then freeze at the start of the next
+ * focus block instead of auto-starting it. The user resumes explicitly.
+ */
+function handlePomodoroBreakEnd(
+  session: Session,
+  snap: TimerSnapshot,
+  config: TimerConfig,
+  now: number,
+): void {
+  if (settings.soundEnabled) {
+    playCue("workStart", settings.soundPreset);
+  }
+  if (settings.notificationsEnabled) {
+    const task = taskById(session.taskId);
+    notify("Break over", task ? `Time to focus — ${task.title}` : "Time to focus");
+  }
+  announce("Break over. Paused — resume when ready for the next focus block.");
+  const phaseDur = phaseMs(snap.phase, config);
+  const elapsedIntoPhase = snap.remainingMs != null ? phaseDur - snap.remainingMs : 0;
+  const boundary = snap.elapsedMs - elapsedIntoPhase;
+  pauseAfterPomodoroBreak(session, boundary, now);
+  setLastWatch({ sessionId: session.id, phase: snap.phase, running: false });
+  flashPhaseChange();
+}
+
 /** 0057: run once on returning to a visible tab to catch transitions missed while throttled. */
 export function catchUpHidden(): void {
   if (breakState) {
-    if (!breakState.done && breakState.endsAt <= Date.now()) {
+    // 0087: a waiting (not-yet-started) break has no countdown to catch up on.
+    if (breakState.running && !breakState.done && breakState.endsAt <= Date.now()) {
       breakOver();
     }
     return;
@@ -80,13 +109,24 @@ export function catchUpHidden(): void {
   }
 
   const running = session.status === "running";
+  let enteredBreak = false;
   if (lastWatch && lastWatch.sessionId === session.id && lastWatch.running && running) {
     const wasBreak = lastWatch.phase !== "work";
     const nowBreak = snap.phase !== "work";
-    if (wasBreak !== nowBreak) handlePhaseBoundary(session, nowBreak);
+    // 0087: break→work never auto-starts the next focus block — pause at the boundary.
+    if (wasBreak && !nowBreak && session.technique === "pomodoro") {
+      handlePomodoroBreakEnd(session, snap, config, Date.now());
+      return;
+    }
+    if (wasBreak !== nowBreak && nowBreak) {
+      handlePhaseBoundary(session, nowBreak);
+      enteredBreak = true;
+    }
   }
   setLastWatch({ sessionId: session.id, phase: snap.phase, running });
   render();
+  // 0088: full render already carries the phase-break tint; flash the crossfade.
+  if (enteredBreak) flashPhaseChange();
 }
 
 /**
@@ -94,7 +134,7 @@ export function catchUpHidden(): void {
  * never drifts and pausing/refreshing is safe.
  */
 function repaintTick(): void {
-  if (breakState && !breakState.done) {
+  if (breakState && !breakState.done && breakState.running) {
     const clock = document.querySelector<HTMLElement>(".clock");
     if (!clock) return;
     const remaining = breakState.endsAt - Date.now();
@@ -142,6 +182,22 @@ function repaintTick(): void {
     return;
   }
 
+  // 0087: a pomodoro break never auto-starts the next focus block — freeze at
+  // the boundary and wait for an explicit resume.
+  const runningAtTick = session.status === "running";
+  if (
+    session.technique === "pomodoro" &&
+    runningAtTick &&
+    lastWatch &&
+    lastWatch.sessionId === session.id &&
+    lastWatch.running &&
+    lastWatch.phase !== "work" &&
+    snap.phase === "work"
+  ) {
+    handlePomodoroBreakEnd(session, snap, config, Date.now());
+    return;
+  }
+
   // 0054: gentle "it's okay to stop" reminder, re-nudging on a fixed cadence.
   if (session.id !== nudgeSessionId) {
     nudgeSessionId = session.id;
@@ -177,7 +233,18 @@ function repaintTick(): void {
   if (lastWatch && lastWatch.sessionId === session.id && lastWatch.running && running) {
     const wasBreak = lastWatch.phase !== "work";
     const nowBreak = snap.phase !== "work";
-    if (wasBreak !== nowBreak) handlePhaseBoundary(session, nowBreak);
+    // 0087: break→work is handled above (pause at the boundary); only work→break
+    // auto-starts here. 0088: no full render (keeps note inputs focused) — just
+    // swap the ring tint and flash the crossfade.
+    if (wasBreak !== nowBreak && nowBreak) {
+      handlePhaseBoundary(session, nowBreak);
+      const frame = document.querySelector<HTMLElement>(".clock-frame");
+      if (frame) {
+        frame.classList.remove("phase-work");
+        frame.classList.add("phase-break");
+      }
+      flashPhaseChange();
+    }
   }
   setLastWatch({ sessionId: session.id, phase: snap.phase, running });
 }

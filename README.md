@@ -50,9 +50,9 @@ your work follows your body's natural rhythm.
 - **Flowtime** — open-ended, count-up sessions for riding a full ultradian wave, with a suggested
   break when you finish
 - **Pomodoro** — work/break cycles with configurable durations and long-break cadence, when you
-  want structure
+  want structure (breaks never auto-start the next focus block — you resume when ready)
 - Drift-free timers derived from timestamps (no clock drift)
-- Automatic break countdown after a session
+- Rest screen after every session, with an automatic break countdown when enabled
 - **Focus mode** — hides everything but the clock and the current task
 - Restart notes per session, plus a "pick up where you left off" hint
 - Sound cues (chime / soft / breeze, with preview) and optional browser notifications

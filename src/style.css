@@ -212,8 +212,8 @@ h1 {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  /* 0005: reserve the top-right corner for the persistent toggles. */
-  padding: 10px 88px 10px 0;
+  /* 0005/0087: reserve just enough of the top-right corner for the fixed toggles. */
+  padding: 10px 48px 10px 0;
   margin: -8px 0 0;
   background: var(--bg);
   background: color-mix(in srgb, var(--bg) 80%, transparent);
@@ -222,10 +222,20 @@ h1 {
   border-bottom: 1px solid transparent;
 }
 
+/* 0087: once the centered app is narrow enough that the fixed corner toggles can't
+   overlap it, right-align the header actions with the content instead of leaving a
+   gap for them. */
+@media (min-width: 1060px) {
+  .app-header {
+    padding-right: 0;
+  }
+}
+
 .header-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .app-title {
@@ -761,6 +771,7 @@ button.primary.icon-btn:hover {
   font-variant-numeric: tabular-nums;
   color: var(--accent-bright);
   line-height: 1;
+  transition: color 0.4s ease;
 }
 
 /* 0064: the clock sits in a frame that can carry a progress ring and a heartbeat glow. */
@@ -793,7 +804,71 @@ button.primary.icon-btn:hover {
   stroke: var(--moss);
   stroke-width: 8;
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.25s linear;
+  transition:
+    stroke-dashoffset 0.25s linear,
+    stroke 0.45s ease;
+}
+
+/* 0088: barely-noticeable work/break tint — the ring (and clock) warm up for breaks. */
+.clock-frame.phase-break .ring-fg {
+  stroke: var(--gold);
+}
+
+.clock-frame.phase-break .clock {
+  color: var(--gold);
+}
+
+.session-phase {
+  transition: opacity 0.3s ease;
+}
+
+/* 0088: one-shot crossfade for work/break transitions (added/removed in JS). */
+.session-main.phase-change .clock-frame {
+  animation: phaseShift 0.45s ease-out;
+}
+
+.session-main.phase-change .session-phase {
+  animation: phaseShift 0.4s ease-out;
+}
+
+@keyframes phaseShift {
+  from {
+    opacity: 0.45;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 0088: the staged Resume control eases in so the eye lands on the next action. */
+.session-main.staged [data-action="resume"] {
+  animation: stagedIn 0.5s ease-out 0.05s both;
+}
+
+@keyframes stagedIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-main.phase-change .clock-frame,
+  .session-main.phase-change .session-phase,
+  .session-main.staged [data-action="resume"] {
+    animation: none;
+  }
+  .ring-fg,
+  .clock-frame .clock,
+  .session-phase {
+    transition: none;
+  }
 }
 
 .clock-frame.pulse .clock {
