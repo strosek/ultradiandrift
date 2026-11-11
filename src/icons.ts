@@ -18,6 +18,7 @@ const ICONS: Record<string, string> = {
   grip: `<circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>`,
   target: `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/>`,
   chevron: `<polyline points="6 9 12 15 18 9"/>`,
+  "chevron-up": `<polyline points="18 15 12 9 6 15"/>`,
   plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
   stop: `<rect x="5" y="5" width="14" height="14" rx="2"/>`,
 };

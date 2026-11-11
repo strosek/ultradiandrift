@@ -16,6 +16,7 @@ import {
   applyTheme,
   breakState,
   focusMode,
+  groupBy,
   lastFinished,
   openMenuTaskId,
   openSections,
@@ -58,7 +59,7 @@ import {
 import { doneSessions, sessionWorkMs, taskTotals } from "./stats";
 import { isFutureOpen, isTodayOpen } from "./tasks";
 import { MIN, formatDuration, snapshot, techniqueLabel } from "./timer";
-import type { SectionKey } from "./state";
+import type { GroupBy, SectionKey } from "./state";
 import type {
   BackgroundMode,
   Quadrant,
@@ -439,7 +440,17 @@ export function reorderTasks(draggedId: string, overId: string): void {
 
 /** 0060: keyboard/touch-friendly reordering — swap a task with its neighbor. */
 function moveTask(id: string, direction: "up" | "down"): void {
-  const ids = manualOrderTasks().map((t) => t.id);
+  const task = taskById(id);
+  if (!task) return;
+  // 0088: when grouped, move within the task's own visible group so the row
+  // actually changes position instead of swapping with a hidden/other-group task.
+  const scoped = manualOrderTasks().filter((t) => {
+    if (groupBy === "priority" && t.priority !== task.priority) return false;
+    if (groupBy === "quadrant" && t.quadrant !== task.quadrant) return false;
+    if (groupBy !== "none" && (isTodayOpen(t) || isFutureOpen(t) || t.quick)) return false;
+    return true;
+  });
+  const ids = scoped.map((t) => t.id);
   const i = ids.indexOf(id);
   if (i < 0) return;
   const j = direction === "up" ? i - 1 : i + 1;
@@ -711,6 +722,55 @@ function cyclePriority(id: string): void {
   task.priority = (task.priority % 5) + 1;
   persist();
   render();
+}
+
+/** 0089: adjust priority one step at a time from the small up/down controls. */
+function stepPriority(id: string, direction: "up" | "down"): void {
+  const task = taskById(id);
+  if (!task) return;
+  const next = direction === "up" ? Math.max(1, task.priority - 1) : Math.min(5, task.priority + 1);
+  if (next === task.priority) return;
+  task.priority = next;
+  persist();
+  render();
+}
+
+/** 0088: move a task into a priority/quadrant group dropped on the board. */
+export function setTaskGroup(id: string, dimension: Exclude<GroupBy, "none">, value: string): void {
+  const task = taskById(id);
+  if (!task || task.done) return;
+
+  if (dimension === "priority") {
+    const priority = Number(value);
+    if (!Number.isInteger(priority) || priority < 1 || priority > 5) return;
+    if (priority === task.priority) return;
+    const previous = task.priority;
+    task.priority = priority;
+    persist();
+    render();
+    showUndoToast(`Priority changed to P${priority}`, () => {
+      const current = taskById(id);
+      if (!current) return;
+      current.priority = previous;
+      persist();
+      render();
+    });
+    return;
+  }
+
+  const quadrant = value as Quadrant;
+  if (!QUADRANT_CYCLE.includes(quadrant) || quadrant === task.quadrant) return;
+  const previous = task.quadrant;
+  task.quadrant = quadrant;
+  persist();
+  render();
+  showUndoToast(`Quadrant changed to ${QUADRANT_LABEL[quadrant]}`, () => {
+    const current = taskById(id);
+    if (!current) return;
+    current.quadrant = previous;
+    persist();
+    render();
+  });
 }
 
 export function setEstimate(id: string, value: string): void {
@@ -2729,6 +2789,9 @@ export function handleAction(
       break;
     case "cycle-priority":
       if (id) cyclePriority(id);
+      break;
+    case "step-priority":
+      if (id && (dir === "up" || dir === "down")) stepPriority(id, dir);
       break;
     case "today":
       if (id) toggleToday(id);

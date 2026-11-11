@@ -42,6 +42,7 @@ your work follows your body's natural rhythm.
 - Tags (`#errands`), descriptions, and optional time estimates
 - Quick tasks for the tiny stuff, batched into one continuous run
 - Manual drag-and-drop ordering alongside priority/type/newest sort
+- Group the backlog by priority or quadrant, and drag a task between groups to change it
 - Search, filter, and sort
 - Undo toasts for completing, deleting, and rescheduling tasks
 

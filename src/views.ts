@@ -5,6 +5,7 @@ import {
   filterPriority,
   filterQuadrant,
   focusMode,
+  groupBy,
   historyTab,
   notesFor,
   openMenuTaskId,
@@ -49,7 +50,7 @@ import {
   techniqueLabel,
 } from "./timer";
 import { isFutureOpen, isOverdueOpen, isTodayOpen } from "./tasks";
-import type { SectionKey } from "./state";
+import type { GroupBy, SectionKey } from "./state";
 import type { Quadrant, Recurrence, Session, Task } from "./types";
 import { QUADRANT_LABEL } from "./types";
 
@@ -328,6 +329,13 @@ function boardControlsHtml(): string {
           <option value="manual" ${sortBy === "manual" ? "selected" : ""}>Manual</option>
         </select>
       </label>
+      <label>Group
+        <select data-group aria-label="Group tasks by">
+          <option value="none" ${groupBy === "none" ? "selected" : ""}>None</option>
+          <option value="priority" ${groupBy === "priority" ? "selected" : ""}>Priority</option>
+          <option value="quadrant" ${groupBy === "quadrant" ? "selected" : ""}>Quadrant</option>
+        </select>
+      </label>
     </div>`;
 }
 
@@ -348,13 +356,13 @@ function matchesSearch(t: Task): boolean {
   return (t.tags ?? []).some((tag) => tag.toLowerCase().includes(q));
 }
 
-function sortedTasks(tasks: Task[]): Task[] {
+function sortedTasks(tasks: Task[], grouping: GroupBy = "none"): Task[] {
   return [...tasks].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     switch (sortBy) {
       case "type":
         return (
-          QUADRANT_ORDER[a.quadrant] - QUADRANT_ORDER[b.quadrant] ||
+          (grouping === "quadrant" ? 0 : QUADRANT_ORDER[a.quadrant] - QUADRANT_ORDER[b.quadrant]) ||
           a.priority - b.priority ||
           a.createdAt - b.createdAt
         );
@@ -367,9 +375,61 @@ function sortedTasks(tasks: Task[]): Task[] {
         );
       case "priority":
       default:
-        return a.priority - b.priority || a.createdAt - b.createdAt;
+        return (grouping === "priority" ? 0 : a.priority - b.priority) || a.createdAt - b.createdAt;
     }
   });
+}
+
+/** 0088: one group of open tasks, rendered under a priority or quadrant heading. */
+interface BoardGroup {
+  value: string;
+  label: string;
+  ariaLabel: string;
+  tasks: Task[];
+}
+
+const PRIORITY_VALUES = [1, 2, 3, 4, 5];
+const QUADRANT_VALUES: Quadrant[] = ["q1", "q2", "q3", "q4"];
+
+function boardGroups(tasks: Task[], by: Exclude<GroupBy, "none">): BoardGroup[] {
+  if (by === "priority") {
+    return PRIORITY_VALUES.map((priority) => ({
+      value: String(priority),
+      label: `P${priority}`,
+      ariaLabel: `Priority ${priority}`,
+      tasks: sortedTasks(
+        tasks.filter((t) => t.priority === priority),
+        by,
+      ),
+    }));
+  }
+  return QUADRANT_VALUES.map((quadrant) => ({
+    value: quadrant,
+    label: QUADRANT_LABEL[quadrant],
+    ariaLabel: `Quadrant ${QUADRANT_LABEL[quadrant]}`,
+    tasks: sortedTasks(
+      tasks.filter((t) => t.quadrant === quadrant),
+      by,
+    ),
+  }));
+}
+
+function taskGroupHtml(group: BoardGroup, by: Exclude<GroupBy, "none">, rowsHtml: string): string {
+  const count = group.tasks.length;
+  const countLabel = `${count} task${count === 1 ? "" : "s"}`;
+  const groupClass = by === "priority" ? `p${group.value}` : group.value;
+  return `
+    <section class="task-group ${groupClass}" data-group-kind="${by}" data-group-value="${group.value}" aria-label="${escapeHtml(`${group.ariaLabel}, ${countLabel}`)}">
+      <h3 class="task-group-heading">
+        <span class="task-group-name">${escapeHtml(group.label)}</span>
+        <span class="task-group-count" title="${countLabel}">${count}</span>
+      </h3>
+      ${
+        count === 0
+          ? `<p class="task-group-empty">No tasks</p>`
+          : `<ul class="task-list">${rowsHtml}</ul>`
+      }
+    </section>`;
 }
 
 /** The "⋯" row menu contents for an open (not done) task. */
@@ -500,7 +560,13 @@ function recurrenceBadgeHtml(rec: Recurrence | null): string {
 }
 
 function priorityLabel(task: Task): string {
-  return `<button class="priority-pill" style="color:${PRIORITY_COLORS[task.priority]}" data-action="cycle-priority" data-id="${task.id}" title="Priority ${task.priority} of 5 — click to change" aria-label="Priority ${task.priority} of 5, click to change">P${task.priority}</button>`;
+  const upDisabled = task.priority <= 1;
+  const downDisabled = task.priority >= 5;
+  return `<span class="priority-control">
+    <button class="priority-step" data-action="step-priority" data-id="${task.id}" data-dir="up" ${upDisabled ? "disabled" : ""} title="${upDisabled ? "Already highest priority" : `Increase priority to P${task.priority - 1}`}" aria-label="${upDisabled ? "Already highest priority" : `Increase priority to P${task.priority - 1}`}">${icon("chevron-up")}</button>
+    <button class="priority-pill" style="color:${PRIORITY_COLORS[task.priority]}" data-action="cycle-priority" data-id="${task.id}" title="Priority ${task.priority} of 5 — click to cycle" aria-label="Priority ${task.priority} of 5, click to cycle">P${task.priority}</button>
+    <button class="priority-step" data-action="step-priority" data-id="${task.id}" data-dir="down" ${downDisabled ? "disabled" : ""} title="${downDisabled ? "Already lowest priority" : `Decrease priority to P${task.priority + 1}`}" aria-label="${downDisabled ? "Already lowest priority" : `Decrease priority to P${task.priority + 1}`}">${icon("chevron")}</button>
+  </span>`;
 }
 
 /** Horizontal proportion bars (label + track + value). */
@@ -569,7 +635,7 @@ function renderBoard(): void {
   // 0060: manual-order position of each open task, to disable Move up/down at the edges.
   const openManual = sortBy === "manual" ? sortedTasks(state.tasks.filter((t) => !t.done)) : [];
 
-  const rowFor = (task: Task, opts: { done?: boolean }): string => {
+  const rowFor = (task: Task, opts: { done?: boolean; manualList?: Task[] }): string => {
     const t = totals.get(task.id)!;
     const bits: string[] = [];
     if (t.workMs > 0) bits.push(formatDuration(t.workMs));
@@ -578,12 +644,13 @@ function renderBoard(): void {
     if (t.pomodoroCount > 0)
       bits.push(`${t.pomodoroCount} pomodoro${t.pomodoroCount === 1 ? "" : "s"}`);
 
-    const manualIdx = openManual.findIndex((o) => o.id === task.id);
+    const manualList = opts.manualList ?? openManual;
+    const manualIdx = manualList.findIndex((o) => o.id === task.id);
     const moveButtons =
       sortBy === "manual" && !task.done && !opts.done
         ? `
                   <button data-action="move-task" data-id="${task.id}" data-dir="up" ${manualIdx <= 0 ? "disabled" : ""}>Move up</button>
-                  <button data-action="move-task" data-id="${task.id}" data-dir="down" ${manualIdx < 0 || manualIdx >= openManual.length - 1 ? "disabled" : ""}>Move down</button>`
+                  <button data-action="move-task" data-id="${task.id}" data-dir="down" ${manualIdx < 0 || manualIdx >= manualList.length - 1 ? "disabled" : ""}>Move down</button>`
         : "";
 
     const menuHtml = opts.done
@@ -604,9 +671,18 @@ function renderBoard(): void {
       ? ""
       : `<button class="icon-btn ${task.quick ? "on" : ""}" data-action="toggle-quick" data-id="${task.id}" title="${task.quick ? "Remove quick mark" : "Mark as quick"}" aria-label="${task.quick ? "Remove quick mark" : "Mark as quick"}" aria-pressed="${task.quick ? "true" : "false"}">${icon("bolt")}</button>`;
 
+    // 0088: grouped rows are draggable even outside manual sort, so a drop can
+    // change the priority/quadrant. Done rows never participate.
+    const canDrag = !task.done && !opts.done && (sortBy === "manual" || groupBy !== "none");
+    const dragTitle = groupBy !== "none" ? "Drag to move between groups" : "Reorder";
+    const dragLabel =
+      groupBy !== "none"
+        ? `Drag ${escapeHtml(task.title)} to change group`
+        : `Reorder ${escapeHtml(task.title)}`;
+
     return `
       <li class="task ${task.quadrant} ${task.done ? "done" : ""} ${isOverdueOpen(task) ? "overdue" : ""}" data-id="${task.id}">
-        ${sortBy === "manual" && !task.done && !opts.done ? `<button class="icon-btn grip" data-grip title="Reorder" aria-label="Reorder ${escapeHtml(task.title)}">${icon("grip")}</button>` : ""}
+        ${canDrag ? `<button class="icon-btn grip" data-grip draggable="true" title="${dragTitle}" aria-label="${dragLabel}">${icon("grip")}</button>` : ""}
         <button class="check" data-action="toggle" data-id="${task.id}" aria-label="Toggle done" aria-pressed="${task.done ? "true" : "false"}">${task.done ? "✓" : ""}</button>
         <div class="task-body">
           <span class="task-title">${escapeHtml(task.title)}${recurrenceBadgeHtml(task.recurrence)}${isOverdueOpen(task) ? `<span class="overdue-badge">overdue</span>` : ""}</span>
@@ -639,6 +715,17 @@ function renderBoard(): void {
   };
 
   const rows = mainTasks.map((task) => rowFor(task, {})).join("");
+  const groupedBy = groupBy !== "none" && state.tasks.length > 0 ? groupBy : null;
+  const groupedRows = groupedBy
+    ? `<div class="task-groups">${boardGroups(mainTasks, groupedBy)
+        .map((group) => {
+          const groupRows = group.tasks
+            .map((task) => rowFor(task, { manualList: group.tasks }))
+            .join("");
+          return taskGroupHtml(group, groupedBy, groupRows);
+        })
+        .join("")}</div>`
+    : "";
   const doneRows = doneTasks.map((task) => rowFor(task, { done: true })).join("");
 
   const quickSection = quickTasks.length
@@ -774,7 +861,11 @@ function renderBoard(): void {
     ${sectionCardHtml(
       "open",
       "Open",
-      mainTasks.length === 0 ? emptyHtml : `<ul class="task-list">${rows}</ul>`,
+      groupedBy
+        ? groupedRows
+        : mainTasks.length === 0
+          ? emptyHtml
+          : `<ul class="task-list">${rows}</ul>`,
       { extraClass: "open-section" },
     )}
 

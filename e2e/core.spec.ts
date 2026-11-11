@@ -48,7 +48,7 @@ test("recurring task reopens into the Later list when completed", async ({ page 
   await expect(page.locator(".section.deferred")).toContainText("Review email");
 
   // Completing it reopens it for its next occurrence (still in Later).
-  await page.click('.section.deferred .check');
+  await page.click(".section.deferred .check");
   await expect(page.locator(".section.deferred")).toContainText("Review email");
   await expect(page.locator(".section.deferred .recur-badge")).toHaveCount(1);
 });
@@ -62,4 +62,18 @@ test("search filters the board", async ({ page }) => {
   await page.fill("#task-search", "Alpha");
   await expect(page.locator(".task-list .task")).toHaveCount(1);
   await expect(page.locator(".task-list .task-title")).toContainText("Alpha");
+});
+
+test("groups tasks by priority and reassigns priority by dragging", async ({ page }) => {
+  await page.goto("/");
+  await page.selectOption("#task-priority", "1");
+  await page.fill("#task-title", "Alpha");
+  await page.click("#add-task");
+  await page.selectOption("[data-group]", "priority");
+
+  await expect(page.locator(".task-group.p1")).toContainText("Alpha");
+  await page.locator(".task-group.p1 .task .grip").dragTo(page.locator(".task-group.p3"));
+
+  await expect(page.locator(".task-group.p3")).toContainText("Alpha");
+  await expect(page.locator(".task-group.p1")).not.toContainText("Alpha");
 });

@@ -34,6 +34,10 @@ export let filterQuadrant: Quadrant | null = null;
 export let sortBy: "priority" | "type" | "newest" | "manual" = "priority";
 export let searchQuery = "";
 
+/** 0088: how the open backlog is grouped (view-only). */
+export type GroupBy = "none" | "priority" | "quadrant";
+export let groupBy: GroupBy = "none";
+
 /** 0037: which task row has its "⋯" menu open. */
 export let openMenuTaskId: string | null = null;
 
@@ -108,6 +112,10 @@ export function setFilterQuadrant(next: Quadrant | null): void {
 
 export function setSortBy(next: typeof sortBy): void {
   sortBy = next;
+}
+
+export function setGroupBy(next: GroupBy): void {
+  groupBy = next;
 }
 
 export function setSearchQuery(next: string): void {

@@ -12,6 +12,7 @@ import {
   reorderTasks,
   resumeSession,
   setEstimate,
+  setTaskGroup,
   showIdleToast,
   startBreak,
 } from "./actions";
@@ -28,6 +29,7 @@ import {
   setFilterPriority,
   setFilterQuadrant,
   setFocusMode,
+  setGroupBy,
   setHiddenAt,
   setHiddenSessionId,
   setHistoryTab,
@@ -35,6 +37,7 @@ import {
   setSearchQuery,
   setSortBy,
   searchQuery,
+  sortBy,
   subView,
 } from "./state";
 import { MIN } from "./timer";
@@ -232,7 +235,12 @@ app.addEventListener("click", (e) => {
     setOpenMenuTaskId(null);
   }
 
-  handleAction(target.dataset.action, target.dataset.id, target.dataset.dir, target.dataset.section);
+  handleAction(
+    target.dataset.action,
+    target.dataset.id,
+    target.dataset.dir,
+    target.dataset.section,
+  );
 });
 
 app.addEventListener("input", (e) => {
@@ -282,6 +290,12 @@ app.addEventListener("change", (e) => {
         "priority" | "type" | "newest" | "manual",
     );
     render();
+    return;
+  }
+  if (target.dataset?.group !== undefined) {
+    const raw = (target as HTMLSelectElement).value;
+    setGroupBy(raw === "priority" || raw === "quadrant" ? raw : "none");
+    render();
   }
 });
 
@@ -313,8 +327,32 @@ app.addEventListener("keydown", (e) => {
   }
 });
 
-// Manual reordering via the grip handle (0048).
+// Manual reordering via the grip handle (0048), plus 0088 grouped drag-to-reassign.
 let dragId: string | null = null;
+let dragFromGroup: { kind: "priority" | "quadrant"; value: string } | null = null;
+
+function closestGroup(target: EventTarget | null): HTMLElement | null {
+  return target instanceof Element ? target.closest<HTMLElement>("[data-group-kind]") : null;
+}
+
+function readDragGroup(
+  el: HTMLElement | null,
+): { kind: "priority" | "quadrant"; value: string } | null {
+  const kind = el?.dataset.groupKind;
+  const value = el?.dataset.groupValue;
+  if ((kind === "priority" || kind === "quadrant") && value) return { kind, value };
+  return null;
+}
+
+function clearDragState(): void {
+  dragId = null;
+  dragFromGroup = null;
+  document
+    .querySelectorAll(".task.dragging, .task.drop-target, .task-group.drop-target")
+    .forEach((el) => {
+      el.classList.remove("dragging", "drop-target");
+    });
+}
 
 app.addEventListener("dragstart", (e) => {
   const handle = (e.target as HTMLElement).closest<HTMLElement>("[data-grip]");
@@ -322,6 +360,7 @@ app.addEventListener("dragstart", (e) => {
   const li = handle.closest<HTMLElement>(".task");
   dragId = li?.dataset.id ?? null;
   if (!dragId) return;
+  dragFromGroup = readDragGroup(li?.closest<HTMLElement>("[data-group-kind]") ?? null);
   e.dataTransfer?.setData("text/plain", dragId);
   e.dataTransfer!.effectAllowed = "move";
   li!.classList.add("dragging");
@@ -329,6 +368,28 @@ app.addEventListener("dragstart", (e) => {
 
 app.addEventListener("dragover", (e) => {
   if (!dragId) return;
+
+  const group = closestGroup(e.target);
+  if (group) {
+    const groupKind = group.dataset.groupKind;
+    const groupValue = group.dataset.groupValue;
+    if ((groupKind !== "priority" && groupKind !== "quadrant") || !groupValue) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "move";
+    group.classList.add("drop-target");
+
+    // In manual mode, a same-group drop can reorder instead of reassigning.
+    if (
+      sortBy === "manual" &&
+      dragFromGroup?.kind === groupKind &&
+      dragFromGroup.value === groupValue
+    ) {
+      const row = (e.target as HTMLElement).closest<HTMLElement>(".task");
+      if (row && row.dataset.id !== dragId) row.classList.add("drop-target");
+    }
+    return;
+  }
+
   const li = (e.target as HTMLElement).closest<HTMLElement>(".task");
   if (!li || li.dataset.id === dragId) return;
   e.preventDefault();
@@ -337,19 +398,50 @@ app.addEventListener("dragover", (e) => {
 });
 
 app.addEventListener("dragleave", (e) => {
-  (e.target as HTMLElement).closest<HTMLElement>(".task")?.classList.remove("drop-target");
+  const target = e.target as HTMLElement;
+  const related = e.relatedTarget as Node | null;
+  const group = target.closest<HTMLElement>("[data-group-kind]");
+  if (group && !group.contains(related)) group.classList.remove("drop-target");
+  const row = target.closest<HTMLElement>(".task");
+  if (row && !row.contains(related)) row.classList.remove("drop-target");
 });
 
 app.addEventListener("drop", (e) => {
+  if (!dragId) {
+    clearDragState();
+    return;
+  }
+
+  const group = closestGroup(e.target);
+  if (group) {
+    const groupKind = group.dataset.groupKind;
+    const groupValue = group.dataset.groupValue;
+    if ((groupKind !== "priority" && groupKind !== "quadrant") || !groupValue) {
+      clearDragState();
+      return;
+    }
+    e.preventDefault();
+    const sameGroup = dragFromGroup?.kind === groupKind && dragFromGroup.value === groupValue;
+    if (!sameGroup) {
+      setTaskGroup(dragId, groupKind, groupValue);
+    } else if (sortBy === "manual") {
+      const row = (e.target as HTMLElement).closest<HTMLElement>(".task");
+      if (row?.dataset.id && row.dataset.id !== dragId) {
+        reorderTasks(dragId, row.dataset.id);
+      }
+    }
+    clearDragState();
+    return;
+  }
+
   const li = (e.target as HTMLElement).closest<HTMLElement>(".task");
-  if (!li || !dragId || li.dataset.id === dragId) return;
+  if (!li || li.dataset.id === dragId) {
+    clearDragState();
+    return;
+  }
   e.preventDefault();
   reorderTasks(dragId, li.dataset.id ?? "");
+  clearDragState();
 });
 
-app.addEventListener("dragend", () => {
-  dragId = null;
-  document.querySelectorAll(".task.dragging, .task.drop-target").forEach((el) => {
-    el.classList.remove("dragging", "drop-target");
-  });
-});
+app.addEventListener("dragend", clearDragState);

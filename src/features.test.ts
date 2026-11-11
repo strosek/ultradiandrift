@@ -20,6 +20,7 @@ beforeEach(async () => {
     setFilterPriority,
     setFilterQuadrant,
     setFocusMode,
+    setGroupBy,
     setHiddenAt,
     setHiddenSessionId,
     setLastFinished,
@@ -54,6 +55,7 @@ beforeEach(async () => {
   setFilterPriority(null);
   setFilterQuadrant(null);
   setSortBy("priority");
+  setGroupBy("none");
   setSearchQuery("");
   setHiddenAt(null);
   setHiddenSessionId(null);
@@ -133,6 +135,117 @@ describe("reorder undo (0074)", () => {
     const undo = document.querySelector<HTMLElement>("#undo-action")!;
     undo.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(state.tasks.find((t) => t.id === first.id)!.order).toBe(1);
+  });
+});
+
+describe("grouped task board (0088)", () => {
+  it("renders every priority group with counts and a drag handle", async () => {
+    const { state, setGroupBy } = await import("./state");
+    const { render } = await import("./views");
+    for (const title of ["Alpha", "Beta", "Gamma"]) addTask(title);
+    state.tasks[0].priority = 1;
+    state.tasks[1].priority = 3;
+    state.tasks[2].priority = 1;
+
+    setGroupBy("priority");
+    render();
+
+    const groups = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-group-kind="priority"]'),
+    );
+    expect(groups.map((g) => g.dataset.groupValue)).toEqual(["1", "2", "3", "4", "5"]);
+    expect(groups[0].querySelector(".task-group-count")!.textContent).toBe("2");
+    expect(groups[1].querySelector(".task-group-count")!.textContent).toBe("0");
+    expect(groups[0].textContent).toContain("Alpha");
+    expect(groups[0].querySelector(".task .grip")).not.toBeNull();
+    expect(groups[1].querySelector(".task-group-empty")!.textContent).toContain("No tasks");
+  });
+
+  it("groups quadrants after filters and hides done tasks from groups", async () => {
+    const { state, setGroupBy, setFilterPriority } = await import("./state");
+    const { render } = await import("./views");
+    for (const title of ["Alpha", "Beta", "Gamma"]) addTask(title);
+    state.tasks[0].quadrant = "q1";
+    state.tasks[0].priority = 1;
+    state.tasks[1].quadrant = "q3";
+    state.tasks[1].priority = 2;
+    state.tasks[2].quadrant = "q1";
+    state.tasks[2].priority = 2;
+    state.tasks[2].done = true;
+
+    setGroupBy("quadrant");
+    setFilterPriority(1);
+    render();
+
+    const groups = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-group-kind="quadrant"]'),
+    );
+    expect(groups.map((g) => g.dataset.groupValue)).toEqual(["q1", "q2", "q3", "q4"]);
+    expect(groups[0].querySelector(".task-group-count")!.textContent).toBe("1");
+    expect(groups[0].textContent).toContain("Alpha");
+    expect(groups[2].querySelector(".task-group-count")!.textContent).toBe("0");
+    expect(document.querySelector(".open-section .done")).toBeNull();
+  });
+
+  it("reassigns priority on drop and restores it with undo", async () => {
+    const { state } = await import("./state");
+    const { setTaskGroup } = await import("./actions");
+    addTask("Alpha");
+    const task = state.tasks[0];
+    expect(task.priority).toBe(2);
+
+    setTaskGroup(task.id, "priority", "4");
+    expect(task.priority).toBe(4);
+    expect(document.querySelector(".toast")!.textContent).toContain("Priority changed to P4");
+
+    document
+      .querySelector<HTMLElement>("#undo-action")!
+      .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(task.priority).toBe(2);
+  });
+
+  it("changes only the quadrant when dropped into a quadrant group", async () => {
+    const { state } = await import("./state");
+    const { setTaskGroup } = await import("./actions");
+    addTask("Alpha");
+    const task = state.tasks[0];
+
+    setTaskGroup(task.id, "quadrant", "q3");
+    expect(task.quadrant).toBe("q3");
+    expect(task.priority).toBe(2);
+    expect(document.querySelector(".toast")!.textContent).toContain(
+      "Quadrant changed to Urgent · Not important",
+    );
+  });
+
+  it("wires the grip drag to a group drop", async () => {
+    const { state, setGroupBy } = await import("./state");
+    const { render } = await import("./views");
+    addTask("Alpha");
+    const task = state.tasks[0];
+    task.priority = 1;
+    setGroupBy("priority");
+    render();
+
+    const grip = document.querySelector<HTMLElement>(".task-group.p1 .grip")!;
+    const target = document.querySelector<HTMLElement>(".task-group.p4")!;
+    const dataTransfer = { setData: () => {}, effectAllowed: "", dropEffect: "" };
+
+    const dragstart = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragstart, "dataTransfer", { value: dataTransfer });
+    grip.dispatchEvent(dragstart);
+
+    const dragover = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(dragover, "dataTransfer", { value: dataTransfer });
+    target.dispatchEvent(dragover);
+    expect(dragover.defaultPrevented).toBe(true);
+
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: dataTransfer });
+    target.dispatchEvent(drop);
+
+    expect(task.priority).toBe(4);
+    expect(document.querySelector(".task-group.p4")!.textContent).toContain("Alpha");
   });
 });
 
@@ -446,6 +559,30 @@ describe("inline priority/quadrant editing (0083)", () => {
       .querySelector<HTMLElement>('[data-action="cycle-quadrant"]')!
       .dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(state.tasks[0].quadrant).toBe("q1");
+  });
+
+  it("steps priority up and down with the small controls", async () => {
+    const { state } = await import("./state");
+    const { render } = await import("./views");
+    addTask("Alpha");
+    const up = (): HTMLButtonElement =>
+      document.querySelector<HTMLButtonElement>('[data-action="step-priority"][data-dir="up"]')!;
+    const down = (): HTMLButtonElement =>
+      document.querySelector<HTMLButtonElement>('[data-action="step-priority"][data-dir="down"]')!;
+
+    expect(state.tasks[0].priority).toBe(2);
+    up().click();
+    expect(state.tasks[0].priority).toBe(1);
+    expect(up().disabled).toBe(true);
+
+    down().click();
+    expect(state.tasks[0].priority).toBe(2);
+
+    state.tasks[0].priority = 4;
+    render();
+    down().click();
+    expect(state.tasks[0].priority).toBe(5);
+    expect(down().disabled).toBe(true);
   });
 });
 
